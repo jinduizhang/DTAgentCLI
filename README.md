@@ -62,6 +62,39 @@ opencode
 └─────────────────────┘    └─────────────────────┘    └─────────────────────┘
 ```
 
+## 目录结构
+
+```
+DTAgentCLI/
+├── bin/                    # CLI 入口
+│   └── dtagent.js
+├── src/                    # TypeScript 源码
+│   ├── commands/           # 命令实现
+│   │   ├── init.ts
+│   │   ├── generate.ts
+│   │   └── extract-experience.ts
+│   └── utils/              # 工具函数
+│       ├── detector.ts
+│       └── report.ts
+├── templates/              # 模板文件
+│   ├── agents/             # OpenCode 代理
+│   │   └── dtagent.md
+│   ├── commands/           # OpenCode 斜杠命令
+│   ├── plugins/            # OpenCode 插件
+│   │   └── task-manager.ts
+│   ├── skills/             # OpenCode 技能
+│   │   ├── generate-java-ut/
+│   │   ├── fix-java-ut/
+│   │   ├── java-coverage/
+│   │   └── init-dt/
+│   └── iterations/         # 迭代历史
+├── docs/                   # 文档
+│   ├── installation.md     # 安装指南
+│   └── usage-scenarios.md  # 使用场景
+├── package.json
+└── README.md
+```
+
 ## 前置条件
 
 - Node.js >= 18.0.0
