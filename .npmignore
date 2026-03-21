@@ -1,0 +1,32 @@
+# Development files
+src/
+tsconfig.json
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Development config
+.sisyphus/
+
+# Test
+coverage/
+*.test.ts
+*.spec.ts
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+.editorconfig
+.prettierrc
+.eslintrc*

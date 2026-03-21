@@ -1,0 +1,51 @@
+{
+  "name": "@dtagent/cli",
+  "version": "0.1.0",
+  "description": "DTAgent CLI - Intelligent Unit Test Generation Tool",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "dtagent": "./bin/dtagent.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node bin/dtagent.js"
+  },
+  "keywords": [
+    "cli",
+    "unit-test",
+    "test-generation",
+    "opencode",
+    "java"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "templates"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jinduizhang/DTAgentCLI.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jinduizhang/DTAgentCLI/issues"
+  },
+  "homepage": "https://github.com/jinduizhang/DTAgentCLI#readme",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "cli-table3": "^0.6.3",
+    "commander": "^12.0.0",
+    "ora": "^5.4.1"
+  }
+}
