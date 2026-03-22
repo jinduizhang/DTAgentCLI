@@ -17,10 +17,22 @@ metadata:
 
 ### 1. 读取项目配置
 
-先读取 `DT_AGENTS.md` 获取 Maven 配置：
-- settings 路径
-- profiles
-- JVM 参数
+**优先从 `DT_AGENTS.md` 读取 Maven 配置**：
+
+```
+if (DT_AGENTS.md 存在) {
+  读取 Maven 命令模板
+  提取 settings、profiles、JVM 参数
+} else {
+  执行 /init-dt 技能初始化
+  重新读取 DT_AGENTS.md
+}
+```
+
+从 `DT_AGENTS.md` 的 `## Maven 命令` 部分获取：
+- `mvn test-compile` 命令（含自定义参数）
+- `mvn test -Dtest={ClassName}` 命令（含自定义参数）
+- settings 路径、profiles、JVM 参数
 
 ### 2. 阶段1: 编译验证（必须成功）
 
