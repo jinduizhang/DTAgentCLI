@@ -17,26 +17,26 @@ metadata:
 
 ### 1. 读取项目配置
 
-**优先从 `DT_AGENTS.md` 读取 Maven 配置**：
+**必须从 `DT_AGENTS.md` 读取 Maven 命令，禁止使用默认命令**：
 
 ```
-if (DT_AGENTS.md 存在) {
-  读取 Maven 命令模板
-  提取 settings、profiles、JVM 参数
-} else {
+if (DT_AGENTS.md 不存在) {
   执行 /init-dt 技能初始化
-  重新读取 DT_AGENTS.md
 }
+
+从 DT_AGENTS.md 读取:
+- 编译命令: mvn test-compile [参数]
+- 运行命令: mvn test -Dtest={ClassName} [参数]
 ```
 
-从 `DT_AGENTS.md` 的 `## Maven 命令` 部分获取：
-- `mvn test-compile` 命令（含自定义参数）
-- `mvn test -Dtest={ClassName}` 命令（含自定义参数）
-- settings 路径、profiles、JVM 参数
+**禁止事项**：
+- ❌ 不准使用默认的 `mvn test-compile`
+- ❌ 不准使用默认的 `mvn test -Dtest=xxx`
+- ✅ 必须使用 DT_AGENTS.md 中的命令（含自定义 settings、profiles、JVM 参数）
 
 ### 2. 阶段1: 编译验证（必须成功）
 
-执行 `mvn test-compile` 验证编译。
+使用 DT_AGENTS.md 中的编译命令验证编译。
 
 **循环修复直到编译通过**：
 
@@ -58,7 +58,7 @@ while (编译失败) {
 
 ### 3. 阶段2: 运行验证（最多10次）
 
-执行 `mvn test -Dtest={ClassName}Test` 运行测试。
+使用 DT_AGENTS.md 中的运行命令执行测试。
 
 **循环修复（最多10次）**：
 
