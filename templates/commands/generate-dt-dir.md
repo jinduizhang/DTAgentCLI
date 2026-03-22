@@ -86,6 +86,14 @@ task-start
 /task-status-dt
 ```
 
+### 查看执行详情
+
+```
+/sessions
+```
+
+打开 Session 选择器，查看每个文件的执行详情。
+
 ### 停止任务
 
 ```
@@ -105,8 +113,8 @@ task-stop
 
 📌 后续操作：
 - 查看进度: /task-status-dt
+- 查看详情: /sessions
 - 停止任务: task-stop
-- 查看 Session: 右侧任务栏
 
 ⚠️ 请勿关闭当前窗口
 ```
