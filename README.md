@@ -47,7 +47,8 @@ opencode
 | `/generate-dt-single {file}` | 端到端单文件测试生成 |
 | `/generate-dt-dir {dir}` | 批量端到端测试生成 |
 | `/task-status-dt` | 查看批量任务进度 |
-| `/mr-ut [--base BRANCH]` | MR 变更 UT 分析 |
+| `/mr-ut [--base BRANCH]` | MR 变更 UT 分析（已提交 MR） |
+| `/diff-ut [--base BRANCH]` | 本地变更 UT 分析（提交前） |
 | `/fix-ut {test}` | 修复失败的测试 |
 | `/coverage [target]` | 分析测试覆盖率 |
 | `/coverage-fill [--threshold N]` | 项目级覆盖率补齐 |
