@@ -389,160 +389,134 @@ async function generateConfig(
   const configPath = path.join(projectDir, 'DT_AGENTS.md');
   const date = new Date().toISOString().split('T')[0];
 
-  let content = `# DT项目经验架构
+  // 提取 Maven 配置
+  const mavenConfig = extractMavenConfig(projectDir);
+  
+  // 构建自定义参数
+  let customArgs = '';
+  if (mavenConfig.settings) {
+    customArgs += ` -s ${mavenConfig.settings}`;
+  }
+  if (mavenConfig.profiles) {
+    customArgs += ` -P${mavenConfig.profiles}`;
+  }
+  if (mavenConfig.jvmArgs) {
+    customArgs += ` ${mavenConfig.jvmArgs}`;
+  }
+  customArgs = customArgs.trim();
+
+  const content = `# DT Agents 配置
 
 **生成时间**: ${date}
-**构建系统**: ${framework.type.toUpperCase()}
-**语言**: ${framework.language}
 
----
+## 测试框架
 
-## 测试框架配置
+- JUnit: ${framework.junit || '未检测到'}
+- Mockito: ${framework.mockito || '未检测到'}
 
-| 组件 | 框架 | 版本 |
-|------|------|------|
-| 测试框架 | JUnit | ${framework.junit || '未检测到'} |
-| Mock框架 | Mockito | ${framework.mockito || '未检测到'} |
-| 断言库 | AssertJ | ${framework.assertj || '未检测到'} |
-| Spring Boot | ${framework.springBoot || '未检测到'} |
-
-`;
-
-  // Add Maven configuration if applicable
-  if (framework.type === 'maven') {
-    content += `## Maven 配置
-
-`;
-    if (framework.hasSettings && framework.settingsPath) {
-      content += `\`\`\`yaml
-settings: ${framework.settingsPath}
-sslInsecure: true  # 内网环境可能需要
-\`\`\`
-
-`;
-    }
-
-    content += `### 常用命令
+## Maven 命令
 
 \`\`\`bash
-# 编译测试
-mvn test-compile
+# 编译测试代码
+mvn test-compile${customArgs ? ' ' + customArgs : ''}
 
-# 执行测试
-mvn test
+# 运行单个测试
+mvn test -Dtest={ClassName}${customArgs ? ' ' + customArgs : ''}
 
-# 执行指定测试
-mvn test -Dtest=ClassNameTest
+# 运行所有测试
+mvn test${customArgs ? ' ' + customArgs : ''}
 
-# 使用自定义settings
-mvn test -s /path/to/settings.xml
-
-# 忽略证书（内网环境）
-mvn test -Dmaven.wagon.http.ssl.insecure=true
+# 覆盖率报告
+mvn jacoco:report${customArgs ? ' ' + customArgs : ''}
 \`\`\`
 
-`;
-  }
+## 测试用例规范
 
-  // Add test class template
-  content += `## 测试类模板
+**必须使用 Given-When-Then 模式**：
 
 \`\`\`java
-@ExtendWith(MockitoExtension.class)
-class {ClassName}Test {
+@Test
+@DisplayName("方法名_场景_预期结果")
+void methodName_scenario_expectedResult() {
+    // Given - 准备测试数据
+    when(dependency.method()).thenReturn(value);
     
-    @Mock
-    private Dependency dependency;
+    // When - 执行被测方法
+    var result = target.method(input);
     
-    @InjectMocks
-    private {ClassName} target;
-    
-    @BeforeEach
-    void setUp() {
-        // 初始化
-    }
-    
-    @Test
-    @DisplayName("测试方法_场景_预期结果")
-    void methodName_scenario_expectedResult() {
-        // Given
-        when(dependency.method()).thenReturn(value);
-        
-        // When
-        var result = target.method(input);
-        
-        // Then
-        assertThat(result).isEqualTo(expected);
-    }
+    // Then - 验证结果
+    assertThat(result).isEqualTo(expected);
+    verify(dependency).method();
 }
 \`\`\`
 
----
+## 命名规范
 
-`;
-
-  // Add extracted experiences
-  if (experiences.length > 0) {
-    content += `## Mock 经验库
-
-`;
-    content += `以下经验从现有测试代码中自动提取：
-
-`;
-    
-    experiences.forEach((exp, index) => {
-      content += `### 经验${index + 1}: ${exp.name}
-
-**类型**: 自动提取
-**来源**: ${exp.source}
-**代码示例**:
-\`\`\`java
-${exp.template}
-\`\`\`
-
-`;
-      if (exp.notes.length > 0) {
-        content += `**注意事项**:\n`;
-        exp.notes.forEach(note => {
-          content += `- ${note}\n`;
-        });
-        content += '\n';
-      }
-    });
-  }
-
-  // Add custom experience section
-  content += `## 添加自定义经验
-
-在 \`.opencode/skills/generate-java-ut/experiences/\` 目录下添加 Markdown 文件：
-
-\`\`\`markdown
----
-title: 经验标题
-type: 二方件Mock
-tags: [tag1, tag2]
----
-
-## 适用场景
-描述什么情况下使用
-
-## 代码示例
-\`\`\`java
-@Mock
-private YourDependency dependency;
-\`\`\`
-
-## 注意事项
-- 注意点1
-\`\`\`
+- 测试类: \`{ClassName}Test\`
+- 测试方法: \`方法名_场景_预期结果\`
+- 使用 \`@DisplayName\` 提供中文描述
 
 ---
 
 *此文件由 dtagent init 自动生成*
-*可直接编辑此文件添加项目经验*
-*更新时间: ${date}*
 `;
 
   fs.writeFileSync(configPath, content);
   console.log(chalk.green('  ✓ 已生成 DT_AGENTS.md'));
+  
+  if (mavenConfig.source) {
+    console.log(chalk.gray(`  Maven 配置来源: ${mavenConfig.source}`));
+  }
+}
+
+/**
+ * Maven 配置信息
+ */
+interface MavenConfig {
+  settings?: string;
+  profiles?: string;
+  jvmArgs?: string;
+  source?: string;
+}
+
+/**
+ * 从 .idea/workspace.xml 提取 Maven 配置
+ */
+function extractMavenConfig(projectDir: string): MavenConfig {
+  const config: MavenConfig = {};
+  
+  // 尝试从 .idea/workspace.xml 提取
+  const workspacePath = path.join(projectDir, '.idea', 'workspace.xml');
+  
+  if (fs.existsSync(workspacePath)) {
+    try {
+      const content = fs.readFileSync(workspacePath, 'utf-8');
+      
+      // 提取 settings 文件路径
+      const settingsMatch = content.match(/myUserSettingsFile[^>]*value="([^"]+)"/);
+      if (settingsMatch) {
+        config.settings = settingsMatch[1];
+      }
+      
+      // 提取 profiles
+      const profilesMatch = content.match(/myProfiles[^>]*value="([^"]+)"/);
+      if (profilesMatch) {
+        config.profiles = profilesMatch[1];
+      }
+      
+      // 提取 JVM 参数
+      const jvmMatch = content.match(/myVmOptions[^>]*value="([^"]+)"/);
+      if (jvmMatch) {
+        config.jvmArgs = jvmMatch[1];
+      }
+      
+      if (config.settings || config.profiles || config.jvmArgs) {
+        config.source = '.idea/workspace.xml';
+      }
+    } catch (e) {
+      // 读取失败，使用默认配置
+    }
+  }
+  
+  return config;
 }
