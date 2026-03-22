@@ -4,6 +4,39 @@
 
 ---
 
+## v0.2.0 - 2026-03-22
+
+### 优化迭代
+
+**核心变更**:
+- 命令重命名，统一 `-dt` 后缀
+- 新增 `/diff-ut` 本地变更分析
+- 新增 `/task-status-dt` 任务进度查看
+- `/fix-ut` 支持目录级批量修复
+- `/init-dt` 简化，自动提取 Maven 配置
+- dtagent 代理禁用 task 工具，禁止修复业务代码
+
+**新增命令**:
+- `/diff-ut [--base BRANCH]` - 本地变更 UT 分析（提交前检查）
+- `/task-status-dt` - 查看批量任务执行进度
+
+**命令重命名**:
+- `/generate-single` → `/generate-dt-single`
+- `/generate-dir` → `/generate-dt-dir`
+
+**优化改进**:
+- `/generate-dt-dir` 参数必填，避免扫描过多文件
+- `/fix-ut` 支持目录级修复，先编译验证再修复
+- `/init-dt` 从 `.idea/workspace.xml` 提取 Maven 配置
+- DT_AGENTS.md 简化，包含可直接使用的命令
+- Session 查看改为 `/sessions` 命令
+
+**代理优化**:
+- dtagent 禁用 task 工具，避免子任务挂起
+- 新增禁止事项：严禁修复业务代码
+
+---
+
 ## v0.1.0 - 2026-03-21
 
 ### 初始版本发布
