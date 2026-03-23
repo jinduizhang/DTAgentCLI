@@ -8,11 +8,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import { detectFramework, formatFrameworkInfo, FrameworkInfo } from '../utils/detector';
+import { parsePomDependencies, identifyInternalDeps, scanLocalMavenRepo } from '../utils/dependency';
+import { decompileJars, generateIndex, saveIndex } from '../utils/cfr';
 
 export interface InitOptions {
   dryRun?: boolean;
   force?: boolean;
   file?: string;  // 可选：指定 pom.xml 或 build.gradle 文件路径
+  decompilePackages?: string[]; // 可选：指定需要反编译的包范围（如 ['com.alibaba.*']）
 }
 
 interface MockExperience {
@@ -69,10 +72,16 @@ export async function initCommand(options: InitOptions): Promise<void> {
     const experiences = await extractExperiences(projectDir);
     console.log(chalk.gray(`  发现 ${experiences.length} 个 Mock 模式`));
 
+    // Step 3.5: Decompile internal dependencies (if requested)
+    if (options.decompilePackages && options.decompilePackages.length > 0) {
+      spinner.text = '正在反编译二方件...';
+      await decompileInternalDependencies(projectDir, options.decompilePackages, spinner);
+    }
+
     // Step 4: Generate configuration
     if (!options.dryRun) {
       spinner.text = '正在生成配置...';
-      await generateConfig(projectDir, framework, experiences);
+      await generateConfig(projectDir, framework, experiences, options.decompilePackages);
     } else {
       console.log(chalk.yellow('\n  [预览模式] 将生成 DT_AGENTS.md'));
     }
@@ -384,7 +393,8 @@ function extractMockPatterns(content: string, filePath: string): MockExperience[
 async function generateConfig(
   projectDir: string, 
   framework: FrameworkInfo, 
-  experiences: MockExperience[]
+  experiences: MockExperience[],
+  decompilePackages?: string[]
 ): Promise<void> {
   const configPath = path.join(projectDir, 'DT_AGENTS.md');
   const date = new Date().toISOString().split('T')[0];
@@ -405,6 +415,33 @@ async function generateConfig(
   }
   customArgs = customArgs.trim();
 
+  // 加载二方件索引（如果存在）
+  let internalDepsSection = '';
+  const depsIndexPath = path.join(projectDir, '.dtagent', 'deps', 'index.json');
+  if (fs.existsSync(depsIndexPath)) {
+    try {
+      const indexContent = fs.readFileSync(depsIndexPath, 'utf-8');
+      const index = JSON.parse(indexContent);
+      const classCount = Object.keys(index).length;
+      
+      if (classCount > 0) {
+        internalDepsSection = `
+## 二方件信息
+
+反编译范围: ${decompilePackages?.join(', ') || '无'}
+反编译类数: ${classCount}
+存储位置: .dtagent/deps/
+索引文件: .dtagent/deps/index.json
+
+**使用方式**:
+生成测试代码时，会自动从 .dtagent/deps/ 读取二方件的 API 签名，实现精准 Mock。
+`;
+      }
+    } catch {
+      // 忽略索引读取失败
+    }
+  }
+
   const content = `# DT Agents 配置
 
 **生成时间**: ${date}
@@ -413,7 +450,7 @@ async function generateConfig(
 
 - JUnit: ${framework.junit || '未检测到'}
 - Mockito: ${framework.mockito || '未检测到'}
-
+${internalDepsSection}
 ## Maven 命令
 
 \`\`\`bash
@@ -519,4 +556,59 @@ function extractMavenConfig(projectDir: string): MavenConfig {
   }
   
   return config;
+}
+
+/**
+ * Decompile internal dependencies using CFR
+ */
+async function decompileInternalDependencies(
+  projectDir: string,
+  packagePatterns: string[],
+  spinner: any
+): Promise<void> {
+  const depsDir = path.join(projectDir, '.dtagent', 'deps');
+  
+  try {
+    // Step 1: Scan local Maven repository for matching jars
+    spinner.text = `正在扫描 Maven 仓库...`;
+    const jarPaths = await scanLocalMavenRepo(packagePatterns);
+    
+    if (jarPaths.length === 0) {
+      console.log(chalk.yellow(`\n  未找到匹配的 jar 文件（包范围: ${packagePatterns.join(', ')}）`));
+      return;
+    }
+    
+    console.log(chalk.gray(`\n  发现 ${jarPaths.length} 个需要反编译的 jar 文件`));
+    
+    // Step 2: Decompile jars using CFR
+    spinner.text = '正在反编译 jar 文件...';
+    const results = await decompileJars(jarPaths, depsDir);
+    
+    // Step 3: Report results
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.length - successCount;
+    
+    console.log(chalk.green(`\n  ✓ 反编译完成: ${successCount} 成功, ${failCount} 失败`));
+    
+    // 输出失败详情
+    const failures = results.filter(r => !r.success);
+    if (failures.length > 0) {
+      console.log(chalk.yellow('\n  失败的 jar:'));
+      for (const failure of failures) {
+        console.log(chalk.gray(`    - ${path.basename(failure.jarPath)}: ${failure.error}`));
+      }
+    }
+    
+    // Step 4: Generate index
+    spinner.text = '正在生成索引文件...';
+    const index = generateIndex(depsDir);
+    saveIndex(depsDir, index);
+    
+    console.log(chalk.green(`\n  ✓ 已生成索引: ${Object.keys(index).length} 个类`));
+    console.log(chalk.gray(`  反编译结果存储在: ${depsDir}`));
+    
+  } catch (error) {
+    console.log(chalk.yellow(`\n  反编译二方件失败: ${error}`));
+    // 不中断流程，继续后续步骤
+  }
 }

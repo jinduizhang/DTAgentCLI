@@ -10,13 +10,22 @@ description: 初始化项目 DT 配置 - 检测框架，提取 Maven 配置，�
 
 - `{file}` - 可选，指定 pom.xml 或 build.gradle 文件路径
 - `--force` - 强制覆盖已有配置
+- `--decompile <packages>` - 反编译二方件，多个包用逗号分隔（如 `com.alibaba.*,com.taobao.*`）
 
 ## 使用
 
 ```
+# 基础初始化
 /init-dt
+
+# 指定配置文件
 /init-dt pom.xml
+
+# 强制覆盖
 /init-dt --force
+
+# 反编译二方件（推荐）
+/init-dt --decompile com.alibaba.*,com.taobao.*
 ```
 
 ## 执行步骤
@@ -40,11 +49,47 @@ description: 初始化项目 DT 配置 - 检测框架，提取 Maven 配置，�
 
 **如果没有 `.idea/workspace.xml`**，使用默认配置。
 
-### 3. 安装 DTAgent 组件
+### 3. 反编译二方件（可选）
+
+**使用 CFR 反编译工具**（内置在 bin/cfr-0.152.jar）
+
+**执行流程**：
+1. 扫描本地 Maven 仓库（~/.m2/repository）
+2. 匹配 `--decompile` 指定的包范围
+3. 反编译匹配的 jar 文件
+4. 存储到 `.dtagent/deps/`
+5. 生成索引文件 `.dtagent/deps/index.json`
+
+**存储结构**：
+```
+.dtagent/
+├── deps/
+│   ├── index.json
+│   ├── com/
+│   │   └── alibaba/
+│   │       └── diamond/
+│   │           └── DiamondClient.java
+│   └── taobao/
+│       └── config/
+│           └── ConfigClient.java
+```
+
+**二方件 Mock 示例**（反编译后生成）：
+```java
+// com.alibaba.diamond.DiamondClient
+@Mock
+private DiamondClient diamondClient;
+
+// Mock 示例:
+when(diamondClient.getConfig(arg0, arg1)).thenReturn(null);
+when(diamondClient.publish(arg0, arg1, arg2)).thenReturn(null);
+```
+
+### 4. 安装 DTAgent 组件
 
 安装到 `.opencode/` 目录。
 
-### 4. 生成 DT_AGENTS.md
+### 5. 生成 DT_AGENTS.md
 
 生成简洁的项目配置文件，包含可直接使用的命令。
 
@@ -72,6 +117,13 @@ Maven 配置来源: .idea/workspace.xml
 - JUnit: 5.9.3
 - Mockito: 5.4.0
 
+## 二方件信息
+
+反编译范围: com.alibaba.*, com.taobao.*
+反编译类数: 15
+存储位置: .dtagent/deps/
+索引文件: .dtagent/deps/index.json
+
 ## Maven 命令
 
 # 编译测试代码
@@ -88,11 +140,7 @@ mvn jacoco:report -s D:/settings.xml -Pdev
 
 ## 测试用例规范
 
-**必须使用 Given-When-Then 模式**：
-
-# Given - 准备测试数据
-# When - 执行被测方法
-# Then - 验证结果
+**必须使用 Given-When-Then 模式**。
 
 ## 命名规范
 
