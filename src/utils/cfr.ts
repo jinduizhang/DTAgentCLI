@@ -273,7 +273,7 @@ export function extractClassInfo(javaFilePath: string): ClassInfo | null {
 }
 
 /**
- * 批量反编译 jar 包列表
+ * 批量反编译 jar 包列表（带版本检查）
  * @param jarPaths jar 文件路径列表
  * @param outputDir 输出目录
  * @param cfrPath CFR jar 路径
@@ -283,16 +283,58 @@ export async function decompileJars(
   jarPaths: string[],
   outputDir: string,
   cfrPath?: string
-): Promise<{ jarPath: string; success: boolean; outputDir: string; error?: string }[]> {
+): Promise<{ jarPath: string; success: boolean; outputDir: string; error?: string; skipped?: boolean }[]> {
   const results = [];
+  
+  // 加载现有版本记录
+  let versions = loadVersions(outputDir) || {};
+  let hasChanges = false;
   
   for (const jarPath of jarPaths) {
     try {
-      // 从 jar 文件名生成子目录
-      const jarName = path.basename(jarPath, '.jar');
+      // 从 jar 路径解析信息: .../com/alibaba/fastjson/2.0.43/fastjson-2.0.43.jar
+      const parsed = parseJarPath(jarPath);
+      if (!parsed) {
+        results.push({
+          jarPath,
+          success: false,
+          outputDir: '',
+          error: '无法解析 jar 路径',
+        });
+        continue;
+      }
+      
+      const { groupId, artifactId, version } = parsed;
+      const key = `${groupId}:${artifactId}`;
+      const jarName = `${artifactId}-${version}`;
       const jarOutputDir = path.join(outputDir, jarName);
       
+      // 检查是否需要重新反编译
+      if (!needsDecompile(outputDir, groupId, artifactId, version)) {
+        results.push({
+          jarPath,
+          success: true,
+          outputDir: jarOutputDir,
+          skipped: true, // 跳过，使用已有版本
+        });
+        continue;
+      }
+      
+      // 清理旧版本
+      cleanOldVersions(outputDir, groupId, artifactId, version);
+      
+      // 执行反编译
       await decompileJar(jarPath, jarOutputDir, cfrPath);
+      
+      // 更新版本记录
+      versions[key] = {
+        groupId,
+        artifactId,
+        version,
+        jarPath,
+        decompiledAt: new Date().toISOString(),
+      };
+      hasChanges = true;
       
       results.push({
         jarPath,
@@ -309,7 +351,52 @@ export async function decompileJars(
     }
   }
   
+  // 保存更新后的版本记录
+  if (hasChanges) {
+    saveVersions(outputDir, versions);
+  }
+  
   return results;
+}
+
+/**
+ * 从 jar 路径解析依赖信息
+ * @param jarPath jar 文件路径
+ * @returns 解析结果或 null
+ */
+function parseJarPath(jarPath: string): { groupId: string; artifactId: string; version: string } | null {
+  // 示例: D:/00_code/repository/com/alibaba/fastjson/2.0.43/fastjson-2.0.43.jar
+  const fileName = path.basename(jarPath, '.jar');
+  
+  // 从文件名解析 artifactId 和 version: fastjson-2.0.43
+  const match = fileName.match(/^(.+)-(\d+\.\d+\.\d+(?:\.\d+)?(?:-.+)?)$/);
+  if (!match) {
+    return null;
+  }
+  
+  const artifactId = match[1];
+  const version = match[2];
+  
+  // 从路径解析 groupId
+  const dir = path.dirname(jarPath);
+  const parts = dir.split(/[/\\]/);
+  
+  // 找到版本号所在位置，往前推是 artifactId，再往前是 groupId
+  const versionIndex = parts.findIndex(p => p === version);
+  if (versionIndex < 2) {
+    return null;
+  }
+  
+  // groupId 是 repository 后面到 artifactId 之前的部分
+  const repoIndex = parts.findIndex(p => p === 'repository');
+  if (repoIndex < 0) {
+    return null;
+  }
+  
+  const groupIdParts = parts.slice(repoIndex + 1, versionIndex - 1);
+  const groupId = groupIdParts.join('.');
+  
+  return { groupId, artifactId, version };
 }
 
 /**
@@ -376,6 +463,120 @@ export function loadIndex(depsDir: string): Record<string, string> | null {
     return JSON.parse(content);
   } catch {
     return null;
+  }
+}
+
+/**
+ * 反编译版本记录
+ */
+export interface DecompiledVersion {
+  groupId: string;
+  artifactId: string;
+  version: string;
+  jarPath: string;
+  decompiledAt: string;
+}
+
+/**
+ * 保存版本记录
+ * @param depsDir 依赖目录
+ * @param versions 版本记录
+ */
+export function saveVersions(depsDir: string, versions: Record<string, DecompiledVersion>): void {
+  const versionsPath = path.join(depsDir, 'versions.json');
+  fs.writeFileSync(versionsPath, JSON.stringify(versions, null, 2), 'utf-8');
+}
+
+/**
+ * 读取版本记录
+ * @param depsDir 依赖目录
+ * @returns 版本记录
+ */
+export function loadVersions(depsDir: string): Record<string, DecompiledVersion> | null {
+  const versionsPath = path.join(depsDir, 'versions.json');
+  
+  if (!fs.existsSync(versionsPath)) {
+    return null;
+  }
+  
+  try {
+    const content = fs.readFileSync(versionsPath, 'utf-8');
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 检查依赖版本是否需要更新
+ * @param depsDir 依赖目录
+ * @param groupId 组 ID
+ * @param artifactId 构件 ID
+ * @param version 当前版本
+ * @returns true 表示需要重新反编译
+ */
+export function needsDecompile(
+  depsDir: string,
+  groupId: string,
+  artifactId: string,
+  version: string
+): boolean {
+  const versions = loadVersions(depsDir);
+  if (!versions) {
+    return true; // 没有版本记录，需要反编译
+  }
+  
+  const key = `${groupId}:${artifactId}`;
+  const existing = versions[key];
+  
+  if (!existing) {
+    return true; // 没有这个依赖的记录，需要反编译
+  }
+  
+  if (existing.version !== version) {
+    return true; // 版本不同，需要重新反编译
+  }
+  
+  // 检查反编译目录是否存在
+  const decompiledDir = path.join(depsDir, `${artifactId}-${version}`);
+  if (!fs.existsSync(decompiledDir)) {
+    return true; // 反编译目录不存在，需要重新反编译
+  }
+  
+  return false; // 版本相同，目录存在，不需要重新反编译
+}
+
+/**
+ * 清理旧版本的反编译文件
+ * @param depsDir 依赖目录
+ * @param groupId 组 ID
+ * @param artifactId 构件 ID
+ * @param currentVersion 当前版本（不清理这个版本）
+ */
+export function cleanOldVersions(
+  depsDir: string,
+  groupId: string,
+  artifactId: string,
+  currentVersion: string
+): void {
+  if (!fs.existsSync(depsDir)) {
+    return;
+  }
+  
+  const prefix = `${artifactId}-`;
+  const items = fs.readdirSync(depsDir);
+  
+  for (const item of items) {
+    if (item.startsWith(prefix) && item !== `${artifactId}-${currentVersion}`) {
+      const itemPath = path.join(depsDir, item);
+      const stat = fs.statSync(itemPath);
+      
+      if (stat.isDirectory()) {
+        // 删除旧版本目录
+        fs.rmSync(itemPath, { recursive: true, force: true });
+        console.log(`  清理旧版本: ${item}`);
+      }
+    }
   }
 }
 

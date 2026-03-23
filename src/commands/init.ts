@@ -588,10 +588,15 @@ async function decompileInternalDependencies(
     const results = await decompileJars(jarPaths, depsDir);
     
     // Step 3: Report results
-    const successCount = results.filter(r => r.success).length;
-    const failCount = results.length - successCount;
+    const newCount = results.filter(r => r.success && !r.skipped).length;
+    const skippedCount = results.filter(r => r.skipped).length;
+    const failCount = results.filter(r => !r.success).length;
     
-    console.log(chalk.green(`\n  ✓ 反编译完成: ${successCount} 成功, ${failCount} 失败`));
+    if (skippedCount > 0) {
+      console.log(chalk.green(`\n  ✓ 反编译完成: ${newCount} 新增, ${skippedCount} 跳过(版本未变化)`));
+    } else {
+      console.log(chalk.green(`\n  ✓ 反编译完成: ${newCount} 成功, ${failCount} 失败`));
+    }
     
     // 输出失败详情
     const failures = results.filter(r => !r.success);
