@@ -20,7 +20,7 @@
 
 ```bash
 # 1. 初始化项目（推荐：指定二方件反编译范围）
-dtagent init --decompile com.alibaba.*,com.taobao.* --m2-repo D:/00_code/repository
+dtagent init --decompile com.huawei.* --m2-repo D:/00_code/repository
 
 # 2. 启动 OpenCode
 opencode

@@ -10,7 +10,9 @@ DTAgent 是基于 OpenCode 的 Java 单元测试生成工具，支持端到端�
 
 | 命令 | 说明 |
 |------|------|
-| `dtagent init [file]` | 初始化项目配置 |
+| `dtagent init` | 初始化项目配置 |
+| `dtagent init --decompile <packages>` | 初始化 + 反编译二方件 |
+| `dtagent init --m2-repo <path>` | 指定 Maven 仓库路径 |
 | `dtagent generate --file <path>` | 生成测试（CLI） |
 | `dtagent extract-experience --dir <path> --save` | 提取经验 |
 
@@ -38,8 +40,8 @@ DTAgent 是基于 OpenCode 的 Java 单元测试生成工具，支持端到端�
 **步骤**：
 
 ```bash
-# 1. 初始化
-dtagent init
+# 1. 初始化（推荐：指定二方件反编译范围）
+dtagent init --decompile com.huawei.* --m2-repo D:/repository
 
 # 2. 启动 OpenCode
 opencode
@@ -57,6 +59,7 @@ opencode
 JUnit: 5.9.3
 Mockito: 5.4.0
 
+二方件反编译: 3 个 jar, 648 个类
 组件位置: .opencode/
 配置文件: DT_AGENTS.md
 默认代理: dtagent
@@ -64,7 +67,55 @@ Mockito: 5.4.0
 
 ---
 
-## 场景二：单文件测试生成
+## 场景二：二方件精准 Mock
+
+**目标**：为二方件（公司内部依赖）生成精准 Mock。
+
+**问题背景**：二方件没有公开文档，Mock 时方法签名容易写错。
+
+**解决方案**：使用 CFR 反编译工具，从 jar 包中提取 API 签名。
+
+### 初始化时反编译
+
+```bash
+# 指定二方件包范围和 Maven 仓库
+dtagent init --decompile com.huawei.*,com.alibaba.* --m2-repo D:/00_code/repository
+```
+
+### 版本自动检测
+
+```bash
+# 再次执行时，版本未变化会跳过反编译
+dtagent init --decompile com.huawei.* --m2-repo D:/repository
+
+# 输出:
+# ✓ 反编译完成: 0 新增, 3 跳过(版本未变化)
+```
+
+### 反编译结果
+
+```
+.dtagent/
+├── deps/
+│   ├── index.json                    # 类名 → 文件映射
+│   ├── versions.json                 # 版本记录
+│   └── fastjson-2.0.43/
+│       └── com/alibaba/fastjson/
+│           └── JSON.java             # 反编译文件
+```
+
+### 二方件识别规则
+
+| 包名前缀 | 类型 | 处理方式 |
+|---------|------|---------|
+| `java.*`, `javax.*` | 标准库 | 直接使用 |
+| `org.springframework.*` | 框架 | 有文档 |
+| `org.apache.*`, `com.google.*` | 开源库 | 有文档 |
+| `com.huawei.*`, `com.alibaba.*` | 二方件 | 使用反编译 |
+
+---
+
+## 场景三：单文件测试生成
 
 **目标**：为单个 Java 类生成单元测试。
 
@@ -101,7 +152,7 @@ Mockito: 5.4.0
 
 ---
 
-## 场景三：批量测试生成
+## 场景四：批量测试生成
 
 **目标**：为目录下所有 Java 类生成测试。
 
@@ -140,7 +191,7 @@ Mockito: 5.4.0
 
 ---
 
-## 场景四：MR 变更 UT 补齐
+## 场景五：MR 变更 UT 补齐
 
 **目标**：为已提交 MR 的变更代码补充测试。
 
@@ -176,7 +227,7 @@ Mockito: 5.4.0
 
 ---
 
-## 场景五：本地变更 UT 分析
+## 场景六：本地变更 UT 分析
 
 **目标**：为本地变更代码补充测试（提交前检查）。
 
@@ -228,7 +279,7 @@ git push
 
 ---
 
-## 场景六：修复失败的测试
+## 场景七：修复失败的测试
 
 **目标**：修复编译错误或测试失败。
 
@@ -295,7 +346,7 @@ git push
 
 ---
 
-## 场景七：覆盖率分析
+## 场景八：覆盖率分析
 
 **目标**：分析项目测试覆盖率，找出测试盲区。
 
@@ -325,7 +376,7 @@ git push
 
 ---
 
-## 场景八：项目级覆盖率补齐
+## 场景九：项目级覆盖率补齐
 
 **目标**：将项目覆盖率提升到目标值。
 
@@ -361,7 +412,7 @@ git push
 
 ---
 
-## 场景九：提取 Mock 经验
+## 场景十：提取 Mock 经验
 
 **目标**：从现有测试中提取 Mock 模式，用于指导后续生成。
 

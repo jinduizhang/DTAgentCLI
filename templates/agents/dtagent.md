@@ -25,7 +25,7 @@ Java 单元测试生成代理。专注于生成高质量单元测试，不调用
 ### 初始化（包含二方件反编译）
 
 ```
-/init-dt --decompile com.alibaba.*,com.taobao.* --m2-repo D:/00_code/repository
+/init-dt --decompile com.huawei.* --m2-repo D:/repository
 ```
 
 ### 单文件生成
@@ -45,13 +45,24 @@ Java 单元测试生成代理。专注于生成高质量单元测试，不调用
 
 ### 1. 识别二方件
 
+**识别逻辑**：检查 import 语句，项目源码目录下不存在的依赖。
+
+```
+对于每个 import:
+  1. 提取包名
+  2. 检查 src/main/java 下是否存在
+     - 存在 → 项目内部代码
+     - 不存在 → 外部依赖
+  3. 匹配二方件包名前缀 → 二方件
+```
+
 **判断规则**：
-| 包名前缀 | 类型 | 处理方式 |
-|---------|------|---------|
-| java.*, javax.* | 标准库 | 直接使用 |
-| org.springframework.* | 框架 | 有文档，直接使用 |
-| org.apache.commons.* | 开源库 | 有文档，直接使用 |
-| com.alibaba.*, com.taobao.* | 二方件 | 需要反编译 |
+| 包名前缀 | 项目中存在 | 类型 | 处理方式 |
+|---------|-----------|------|---------|
+| com.huawei.* | ❌ | 二方件 | 需要反编译 |
+| com.alibaba.* | ❌ | 二方件 | 需要反编译 |
+| org.springframework.* | ❌ | 三方库 | 有文档 |
+| com.example.* | ✅ | 项目内部 | 直接读源码 |
 
 ### 2. 查找反编译文件
 

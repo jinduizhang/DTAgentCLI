@@ -24,25 +24,41 @@ metadata:
 ### 3. 识别二方件依赖
 
 **什么是二方件**：
-- 公司/组织内部的依赖（如 com.alibaba.*, com.taobao.*）
-- 非 Maven Central 标准库的依赖
+- 公司/组织内部的依赖（如 com.huawei.*）
+- 通过 Maven/Gradle 依赖引入，不在项目源码目录下
 - 没有公开文档的依赖
 
-**识别方式**：
+**识别逻辑**：
 
 ```
-1. 检查 @Autowired/@Resource/@Mock 注入的字段
-2. 检查类的 import 语句
-3. 对比 DT_AGENTS.md 中的反编译范围
+对于每个 import 语句:
+  1. 提取包名（如 com.huawei.config.DiamondClient → com.huawei.config）
+  2. 检查项目源码目录（src/main/java）下是否存在该包
+     - 存在 → 项目内部代码，不需要反编译
+     - 不存在 → 外部依赖
+  3. 判断是否匹配二方件包名前缀（com.huawei.* 等）
+     - 匹配 → 二方件，需要反编译
+     - 不匹配 → 三方库，有文档
+```
+
+**识别示例**：
+
+```java
+// 被测类 import 语句
+import com.huawei.config.DiamondClient;    // 项目中无此文件 → 二方件
+import com.huawei.common.StringUtils;      // 项目中无此文件 → 二方件
+import com.alibaba.fastjson.JSON;          // 项目中无此文件 → 三方库（有文档）
+import org.springframework.stereotype.Service; // 三方库
+import com.example.service.UserService;    // 项目中有此文件 → 项目内部代码
 ```
 
 **二方件识别规则**：
 
-| 类型 | 示例 | 判断 |
-|------|------|------|
-| 标准库 | java.*, javax.*, org.springframework.* | 三方库，有文档 |
-| 开源库 | org.apache.commons.*, com.google.guava.* | 三方库，有文档 |
-| 二方件 | com.alibaba.*, com.taobao.*, com.yourcompany.* | 需要反编译 |
+| 类型 | 示例 | 项目中存在 | 处理方式 |
+|------|------|-----------|---------|
+| 项目内部代码 | com.example.service.* | ✅ 存在 | 直接读取源码 |
+| 二方件 | com.huawei.*, com.alibaba.* | ❌ 不存在 | 使用反编译 |
+| 三方库 | org.springframework.* | ❌ 不存在 | 有文档，直接使用 |
 
 ### 4. 使用反编译文件
 

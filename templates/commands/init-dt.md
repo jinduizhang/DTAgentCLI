@@ -10,7 +10,7 @@ description: 初始化项目 DT 配置 - 检测框架，提取 Maven 配置，�
 
 - `{file}` - 可选，指定 pom.xml 或 build.gradle 文件路径
 - `--force` - 强制覆盖已有配置
-- `--decompile <packages>` - 反编译二方件，多个包用逗号分隔（如 `com.alibaba.*,com.taobao.*`）
+- `--decompile <packages>` - 反编译二方件，多个包用逗号分隔（如 `com.huawei.*`）
 - `--m2Repo <path>` - Maven 本地仓库路径（如 `D:/00_code/repository`）
 
 ## 使用
@@ -26,13 +26,13 @@ description: 初始化项目 DT 配置 - 检测框架，提取 Maven 配置，�
 /init-dt --force
 
 # 反编译二方件（推荐）
-/init-dt --decompile com.alibaba.*,com.taobao.*
+/init-dt --decompile com.huawei.*
 
 # 指定 Maven 仓库路径
-/init-dt --m2Repo D:/00_code/repository
+/init-dt --m2Repo D:/repository
 
 # 完整命令
-/init-dt --decompile com.alibaba.*,com.taobao.* --m2Repo D:/00_code/repository
+/init-dt --decompile com.huawei.* --m2Repo D:/repository
 ```
 
 ## 执行步骤
