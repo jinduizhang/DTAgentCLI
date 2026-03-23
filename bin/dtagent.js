@@ -15,9 +15,19 @@ program
   .description('初始化 DTAgent 配置')
   .option('-d, --dry-run', '仅显示将要执行的操作，不实际执行')
   .option('-f, --force', '强制覆盖已有配置')
+  .option('--decompile <packages>', '反编译二方件，多个包用逗号分隔（如 com.alibaba.*,com.taobao.*）')
+  .option('--m2-repo <path>', 'Maven 本地仓库路径')
   .action(async (file, options) => {
     const { initCommand } = require('../dist/commands/init');
-    await initCommand({ ...options, file });
+    // 解析 decompile 参数
+    const initOptions = { ...options, file };
+    if (options.decompile) {
+      initOptions.decompilePackages = options.decompile.split(',').map(s => s.trim());
+    }
+    if (options.m2Repo) {
+      initOptions.m2Repo = options.m2Repo;
+    }
+    await initCommand(initOptions);
   });
 
 // Generate command

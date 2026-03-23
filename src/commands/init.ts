@@ -8,7 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import { detectFramework, formatFrameworkInfo, FrameworkInfo } from '../utils/detector';
-import { parsePomDependencies, identifyInternalDeps, scanLocalMavenRepo } from '../utils/dependency';
+import { parsePomDependencies, identifyInternalDeps, scanLocalMavenRepo, setMavenConfig } from '../utils/dependency';
 import { decompileJars, generateIndex, saveIndex } from '../utils/cfr';
 
 export interface InitOptions {
@@ -16,6 +16,7 @@ export interface InitOptions {
   force?: boolean;
   file?: string;  // 可选：指定 pom.xml 或 build.gradle 文件路径
   decompilePackages?: string[]; // 可选：指定需要反编译的包范围（如 ['com.alibaba.*']）
+  m2Repo?: string; // 可选：Maven 本地仓库路径
 }
 
 interface MockExperience {
@@ -31,6 +32,12 @@ export async function initCommand(options: InitOptions): Promise<void> {
 
   const spinner = ora('正在初始化 DTAgent...').start();
   let projectDir = process.cwd();
+
+  // 设置 Maven 配置（如果指定了 m2Repo）
+  if (options.m2Repo) {
+    setMavenConfig({ localRepo: options.m2Repo });
+    console.log(chalk.gray(`  Maven 仓库: ${options.m2Repo}`));
+  }
 
   try {
     // 如果指定了文件参数，使用文件所在目录作为项目目录
@@ -75,7 +82,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
     // Step 3.5: Decompile internal dependencies (if requested)
     if (options.decompilePackages && options.decompilePackages.length > 0) {
       spinner.text = '正在反编译二方件...';
-      await decompileInternalDependencies(projectDir, options.decompilePackages, spinner);
+      await decompileInternalDependencies(projectDir, options.decompilePackages, spinner, options.m2Repo);
     }
 
     // Step 4: Generate configuration
@@ -564,14 +571,15 @@ function extractMavenConfig(projectDir: string): MavenConfig {
 async function decompileInternalDependencies(
   projectDir: string,
   packagePatterns: string[],
-  spinner: any
+  spinner: any,
+  m2Repo?: string
 ): Promise<void> {
   const depsDir = path.join(projectDir, '.dtagent', 'deps');
   
   try {
     // Step 1: Scan local Maven repository for matching jars
     spinner.text = `正在扫描 Maven 仓库...`;
-    const jarPaths = await scanLocalMavenRepo(packagePatterns);
+    const jarPaths = await scanLocalMavenRepo(packagePatterns, m2Repo);
     
     if (jarPaths.length === 0) {
       console.log(chalk.yellow(`\n  未找到匹配的 jar 文件（包范围: ${packagePatterns.join(', ')}）`));

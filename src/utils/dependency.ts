@@ -8,6 +8,57 @@ import * as path from 'path';
 import * as os from 'os';
 
 /**
+ * Maven 配置
+ */
+export interface MavenConfig {
+  /** 本地仓库路径 */
+  localRepo?: string;
+  /** settings.xml 路径 */
+  settingsPath?: string;
+}
+
+// 全局 Maven 配置（可通过 setMavenConfig 设置）
+let mavenConfig: MavenConfig = {};
+
+/**
+ * 设置 Maven 配置
+ */
+export function setMavenConfig(config: MavenConfig): void {
+  mavenConfig = { ...mavenConfig, ...config };
+}
+
+/**
+ * 获取 Maven 本地仓库路径
+ */
+export function getMavenLocalRepo(): string {
+  // 优先使用配置的路径
+  if (mavenConfig.localRepo) {
+    return mavenConfig.localRepo;
+  }
+  
+  // 尝试从 settings.xml 读取
+  const settingsPath = mavenConfig.settingsPath || path.join(os.homedir(), '.m2', 'settings.xml');
+  if (fs.existsSync(settingsPath)) {
+    try {
+      const content = fs.readFileSync(settingsPath, 'utf-8');
+      const match = content.match(/<localRepository>([^<]+)<\/localRepository>/);
+      if (match) {
+        const repoPath = match[1].trim();
+        if (fs.existsSync(repoPath)) {
+          mavenConfig.localRepo = repoPath; // 缓存
+          return repoPath;
+        }
+      }
+    } catch {
+      // 忽略读取失败
+    }
+  }
+  
+  // 默认路径
+  return path.join(os.homedir(), '.m2', 'repository');
+}
+
+/**
  * 依赖信息
  */
 export interface DepInfo {
@@ -96,8 +147,12 @@ function resolveProperty(content: string, propertyName: string): string {
 
 /**
  * 定位 Maven jar 文件
+ * @param groupId 组 ID
+ * @param artifactId 构件 ID
+ * @param version 版本
+ * @param customRepo 可选的自定义仓库路径
  */
-function locateMavenJar(groupId: string, artifactId: string, version: string): string {
+function locateMavenJar(groupId: string, artifactId: string, version: string, customRepo?: string): string {
   if (!version) {
     return '';
   }
@@ -105,10 +160,22 @@ function locateMavenJar(groupId: string, artifactId: string, version: string): s
   const groupPath = groupId.replace(/\./g, '/');
   const jarName = `${artifactId}-${version}.jar`;
   
-  // 常见 Maven 仓库路径
-  const possiblePaths = [
-    path.join(os.homedir(), '.m2', 'repository', groupPath, artifactId, version, jarName),
-  ];
+  // 常见 Maven 仓库路径（按优先级）
+  const possiblePaths: string[] = [];
+  
+  // 1. 自定义仓库路径
+  if (customRepo) {
+    possiblePaths.push(path.join(customRepo, groupPath, artifactId, version, jarName));
+  }
+  
+  // 2. 从 getMavenLocalRepo 获取（可能从 settings.xml 读取）
+  const localRepo = getMavenLocalRepo();
+  if (localRepo !== customRepo) {
+    possiblePaths.push(path.join(localRepo, groupPath, artifactId, version, jarName));
+  }
+  
+  // 3. 默认路径
+  possiblePaths.push(path.join(os.homedir(), '.m2', 'repository', groupPath, artifactId, version, jarName));
   
   for (const jarPath of possiblePaths) {
     if (fs.existsSync(jarPath)) {
@@ -236,10 +303,11 @@ function parseDependencyTree(content: string): DepInfo[] {
 /**
  * 扫描本地 Maven 仓库，查找匹配包的 jar
  * @param packagePatterns 包名模式（如 ['com.alibaba.*']）
+ * @param customRepo 可选的自定义仓库路径
  * @returns jar 路径列表
  */
-export async function scanLocalMavenRepo(packagePatterns: string[]): Promise<string[]> {
-  const m2Repo = path.join(os.homedir(), '.m2', 'repository');
+export async function scanLocalMavenRepo(packagePatterns: string[], customRepo?: string): Promise<string[]> {
+  const m2Repo = customRepo || getMavenLocalRepo();
   const jarPaths: string[] = [];
   
   function scanDir(dir: string) {

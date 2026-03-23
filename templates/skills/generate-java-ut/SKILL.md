@@ -21,10 +21,154 @@ metadata:
 
 分析源代码结构，识别 public 方法和依赖。
 
-### 3. 匹配经验
+### 3. 识别二方件依赖
+
+**什么是二方件**：
+- 公司/组织内部的依赖（如 com.alibaba.*, com.taobao.*）
+- 非 Maven Central 标准库的依赖
+- 没有公开文档的依赖
+
+**识别方式**：
+
+```
+1. 检查 @Autowired/@Resource/@Mock 注入的字段
+2. 检查类的 import 语句
+3. 对比 DT_AGENTS.md 中的反编译范围
+```
+
+**二方件识别规则**：
+
+| 类型 | 示例 | 判断 |
+|------|------|------|
+| 标准库 | java.*, javax.*, org.springframework.* | 三方库，有文档 |
+| 开源库 | org.apache.commons.*, com.google.guava.* | 三方库，有文档 |
+| 二方件 | com.alibaba.*, com.taobao.*, com.yourcompany.* | 需要反编译 |
+
+### 4. 使用反编译文件
+
+**查找二方件 API 签名**：
+
+```
+对于每个二方件依赖:
+  1. 从 .dtagent/deps/index.json 查找类名
+  2. 如果找到 → 读取对应的 .java 文件
+  3. 提取方法签名、返回值类型、参数类型
+  4. 生成精准 Mock
+```
+
+**反编译文件路径规则**：
+```
+.dtagent/deps/
+├── index.json                           # 索引
+├── fastjson-2.0.43/                     # jar 名
+│   └── com/alibaba/fastjson/
+│       └── JSON.java                    # 反编译文件
+```
+
+**从反编译文件提取的信息**：
+
+```java
+// 反编译后的 JSON.java
+public abstract class JSON implements JSONAware {
+    public static <T> T parseObject(String text, Class<T> clazz) { ... }
+    public static String toJSONString(Object object) { ... }
+    public static JSONObject parseObject(String text) { ... }
+}
+```
+
+### 5. 生成精准 Mock
+
+**基于反编译信息生成 Mock**：
+
+```java
+// 识别到二方件依赖
+@Autowired
+private DiamondClient diamondClient;
+
+// 从 .dtagent/deps 读取 API 签名后生成:
+@Mock
+private DiamondClient diamondClient;
+
+// 精准 Mock（知道方法签名和返回值）
+when(diamondClient.getConfig("dataId", "group")).thenReturn("mockValue");
+when(diamondClient.getConfig(anyString(), anyString())).thenReturn("default");
+```
+
+### 6. 匹配经验
 
 根据 import、注解、类名匹配经验。
 
-### 4. 生成测试
+### 7. 生成测试
 
 创建测试类，生成测试用例，应用匹配到的经验。
+
+---
+
+## 二方件处理示例
+
+**场景**：被测类使用了 `DiamondClient`
+
+```java
+// 被测类
+@Service
+public class ConfigService {
+    @Autowired
+    private DiamondClient diamondClient;
+    
+    public String getConfig(String dataId) {
+        return diamondClient.getConfig(dataId, "DEFAULT_GROUP");
+    }
+}
+```
+
+**生成流程**：
+
+```
+1. 识别依赖: DiamondClient (com.alibaba.diamond)
+2. 判断: com.alibaba.* 是二方件
+3. 查找: .dtagent/deps/index.json → 找到 DiamondClient
+4. 读取: .dtagent/deps/.../DiamondClient.java
+5. 提取方法签名:
+   - String getConfig(String dataId, String group)
+   - void publish(String dataId, String group, String content)
+6. 生成精准 Mock
+```
+
+**生成的测试代码**：
+
+```java
+@ExtendWith(MockitoExtension.class)
+class ConfigServiceTest {
+    
+    @Mock
+    private DiamondClient diamondClient;
+    
+    @InjectMocks
+    private ConfigService configService;
+    
+    @Test
+    @DisplayName("getConfig_正常调用_返回配置值")
+    void getConfig_normalCall_returnsConfigValue() {
+        // Given
+        when(diamondClient.getConfig("testDataId", "DEFAULT_GROUP"))
+            .thenReturn("testValue");
+        
+        // When
+        String result = configService.getConfig("testDataId");
+        
+        // Then
+        assertThat(result).isEqualTo("testValue");
+        verify(diamondClient).getConfig("testDataId", "DEFAULT_GROUP");
+    }
+}
+```
+
+---
+
+## 注意事项
+
+1. **二方件识别**：必须先执行 `/init-dt --decompile` 初始化
+2. **索引查找**：优先从 index.json 查找，速度快
+3. **API 签名**：从反编译文件中提取完整的方法签名
+4. **返回值类型**：Mock 时必须匹配正确的返回值类型
+5. **参数匹配**：使用 anyString() 或具体值，根据测试场景选择
