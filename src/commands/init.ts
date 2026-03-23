@@ -142,7 +142,6 @@ async function installComponents(
     path.join(opencodeDir, 'plugins'),
     path.join(opencodeDir, 'agents'),
     path.join(opencodeDir, 'commands'),
-    path.join(opencodeDir, 'iterations'),
   ];
 
   for (const dir of dirs) {
@@ -181,10 +180,6 @@ async function installComponents(
   // Copy commands (OpenCode slash commands)
   copySkill(path.join(templatesDir, 'commands'), 
             path.join(opencodeDir, 'commands'));
-
-  // Copy iterations (changelog and snapshots)
-  copySkill(path.join(templatesDir, 'iterations'), 
-            path.join(opencodeDir, 'iterations'));
 
   // Create package.json for .opencode
   createOpenCodePackageJson(opencodeDir);
