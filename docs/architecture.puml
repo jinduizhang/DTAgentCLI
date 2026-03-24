@@ -1,0 +1,65 @@
+@startuml
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam linetype ortho
+skinparam componentStyle rectangle
+
+' 增加间距
+skinparam padding 20
+skinparam margin 30
+
+title DTAgent CLI 架构图
+
+' 横向布局，更分散
+left to right direction
+
+' ==================== 第一层：用户入口 ====================
+package "用户层" #E3F2FD {
+    [CLI入口\ndtagent] as CLI
+}
+
+' ==================== 第二层：核心命令 ====================
+package "命令层" #E8F5E9 {
+    [init] as INIT
+    [generate] as GEN
+}
+
+' ==================== 第三层：外部依赖 ====================
+package "外部系统" #FFEBEE {
+    [Maven/Gradle\n构建工具] as MAVEN
+    [OpenCode AI\nAI平台] as AI
+    [Java\n反编译] as JAVA
+}
+
+' ==================== 第四层：能力组件 ====================
+package "能力层" #FFF3E0 {
+    [Skills\n测试生成/修复] as SKILLS
+    [Plugins\n批量任务/反编译] as PLUGINS
+}
+
+' ==================== 第五层：数据输出 ====================
+package "数据层" #F3E5F5 {
+    [DT_AGENTS.md\n配置文档] as CONFIG
+    [.opencode/\n工作目录] as OPENCODE
+    [.dtagent/deps/\n二方件] as DEPS
+}
+
+' ==================== 依赖关系 ====================
+
+CLI --> INIT
+CLI --> GEN
+
+INIT --> MAVEN : 检测框架
+INIT --> JAVA : 反编译
+
+INIT --> OPENCODE : 安装组件
+INIT --> CONFIG : 生成配置
+INIT --> DEPS : 存储
+
+AI --> SKILLS : 执行
+AI --> PLUGINS : 调用
+
+PLUGINS --> DEPS : 读取
+
+@enduml
