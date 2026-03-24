@@ -1,0 +1,70 @@
+@startuml
+
+!theme plain
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+title DTAgent Init - 初始化时序图
+
+actor User
+participant "CLI入口" as CLI
+participant "Init命令" as INIT
+participant "框架检测" as DET
+participant "依赖解析" as DEP
+participant "CFR反编译" as CFR
+participant "文件系统" as FS
+participant "Maven仓库" as MAVEN
+
+== 1. 启动初始化 ==
+
+User -> CLI : dtagent init --decompile com.* --m2-repo /path
+activate CLI
+
+CLI -> INIT : initCommand(options)
+activate INIT
+
+== 2. 框架检测 ==
+
+INIT -> DET : detectFramework()
+activate DET
+DET -> FS : 读取pom.xml/build.gradle
+FS --> DET : 项目配置
+DET --> INIT : FrameworkInfo
+
+detach DET
+
+== 3. 依赖解析 ==
+
+INIT -> DEP : parseDependencies()
+activate DEP
+DEP -> MAVEN : 扫描本地仓库
+MAVEN --> DEP : jar文件列表
+DEP --> INIT : 依赖信息
+
+detach DEP
+
+== 4. 二方件反编译 ==
+
+INIT -> CFR : decompileJars()
+activate CFR
+CFR -> JAVA : java -jar cfr.jar
+JAVA --> CFR : 反编译结果
+CFR -> FS : 写入.dtagent/deps/
+CFR --> INIT : 完成
+
+detach CFR
+
+== 5. 安装组件 ==
+
+INIT -> FS : 复制模板到.opencode/
+INIT -> FS : 生成DT_AGENTS.md
+
+INIT --> CLI : 完成
+
+deactivate INIT
+
+CLI --> User : 初始化完成
+
+deactivate CLI
+
+@enduml

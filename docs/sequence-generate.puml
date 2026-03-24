@@ -1,0 +1,73 @@
+@startuml
+
+!theme plain
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+title DTAgent Generate - 生成测试时序图
+
+actor User
+participant "CLI入口" as CLI
+participant "Generate命令" as GEN
+participant "文件系统" as FS
+participant "OpenCode AI" as AI
+participant "Decompile插件" as PLUGIN
+
+== 1. 启动生成 ==
+
+User -> CLI : dtagent generate --file Service.java
+activate CLI
+
+CLI -> GEN : generateCommand(options)
+activate GEN
+
+== 2. 前置检查 ==
+
+GEN -> FS : 检查DT_AGENTS.md
+FS --> GEN : 存在
+
+GEN -> FS : 检查源文件
+FS --> GEN : 存在
+
+== 3. 调用AI生成 ==
+
+GEN -> AI : execute opencode -p "prompt"
+activate AI
+
+AI -> AI : 分析源码
+
+== 4. 按需反编译 ==
+
+AI -> PLUGIN : decompile-check(className)
+PLUGIN --> AI : 不存在
+
+AI -> PLUGIN : decompile-class()
+activate PLUGIN
+PLUGIN -> FS : 读取Maven仓库
+PLUGIN --> AI : 反编译完成
+
+deactivate PLUGIN
+
+AI -> FS : 读取反编译文件
+FS --> AI : API签名
+
+== 5. 生成测试 ==
+
+AI -> AI : 生成精准Mock
+AI -> FS : 写入测试文件
+
+AI --> GEN : 成功
+
+deactivate AI
+
+GEN -> FS : 保存报告
+
+GEN --> CLI : 完成
+
+deactivate GEN
+
+CLI --> User : 生成完成
+
+deactivate CLI
+
+@enduml
