@@ -1,65 +1,69 @@
 @startuml
+!define RECTANGLE class
 
-!theme plain
 skinparam backgroundColor #FEFEFE
-skinparam linetype ortho
 skinparam componentStyle rectangle
+skinparam linetype ortho
 
-' 增加间距
-skinparam padding 20
-skinparam margin 30
+title DTAgent CLI - 业务逻辑视图 (Business Logic View)
 
-title DTAgent CLI 架构图
-
-' 横向布局，更分散
-left to right direction
-
-' ==================== 第一层：用户入口 ====================
-package "用户层" #E3F2FD {
-    [CLI入口\ndtagent] as CLI
+package "CLI Layer" #E8F4FD {
+    [CLI Entry] as CLI <<bin/dtagent.js>>
 }
 
-' ==================== 第二层：核心命令 ====================
-package "命令层" #E8F5E9 {
-    [init] as INIT
-    [generate] as GEN
+package "Command Layer" #E8F8E8 {
+    [Init Command] as INIT <<init.ts>>
+    [Generate Command] as GEN <<generate.ts>>
+    [Extract Experience] as EXT <<extract-experience.ts>>
 }
 
-' ==================== 第三层：外部依赖 ====================
-package "外部系统" #FFEBEE {
-    [Maven/Gradle\n构建工具] as MAVEN
-    [OpenCode AI\nAI平台] as AI
-    [Java\n反编译] as JAVA
+package "Utils Layer" #FFF4E6 {
+    [Framework Detector] as DET <<detector.ts>>
+    [Dependency Manager] as DEP <<dependency.ts>>
+    [CFR Decompiler] as CFR <<cfr.ts>>
+    [Report Generator] as REP <<report.ts>>
 }
 
-' ==================== 第四层：能力组件 ====================
-package "能力层" #FFF3E0 {
-    [Skills\n测试生成/修复] as SKILLS
-    [Plugins\n批量任务/反编译] as PLUGINS
+package "External Systems" #FFE6E6 {
+    [Maven/Gradle] as BUILD
+    [OpenCode] as OPCODE
+    [Java Process] as JAVA
+    [File System] as FS
 }
 
-' ==================== 第五层：数据输出 ====================
-package "数据层" #F3E5F5 {
-    [DT_AGENTS.md\n配置文档] as CONFIG
-    [.opencode/\n工作目录] as OPENCODE
-    [.dtagent/deps/\n二方件] as DEPS
+package "Output" #F0E6FF {
+    [DT_AGENTS.md] as CONFIG
+    [.opencode/] as OPDIR
+    [.dtagent/deps/] as DEPS
+    [Test Reports] as REPORTS
 }
 
-' ==================== 依赖关系 ====================
+' CLI to Commands
+CLI --> INIT : init
+CLI --> GEN : generate
+CLI --> EXT : extract-experience
 
-CLI --> INIT
-CLI --> GEN
+' Commands to Utils
+INIT --> DET : detect framework
+INIT --> DEP : parse dependencies
+INIT --> CFR : decompile JARs
 
-INIT --> MAVEN : 检测框架
-INIT --> JAVA : 反编译
+GEN --> OPCODE : invoke generate-java-ut
+GEN --> FS : scan/write files
 
-INIT --> OPENCODE : 安装组件
-INIT --> CONFIG : 生成配置
-INIT --> DEPS : 存储
+EXT --> FS : read test files
 
-AI --> SKILLS : 执行
-AI --> PLUGINS : 调用
+' Utils to External
+DET --> BUILD : read pom.xml/build.gradle
+DEP --> BUILD : resolve dependencies
+DEP --> FS : scan Maven repo
+CFR --> JAVA : exec CFR jar
+CFR --> FS : write decompiled
 
-PLUGINS --> DEPS : 读取
+' Outputs
+INIT --> CONFIG : generate
+INIT --> OPDIR : install skills
+INIT --> DEPS : store decompiled
 
+GEN --> REPORTS : save results
 @enduml
