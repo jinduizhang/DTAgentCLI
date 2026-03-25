@@ -18,15 +18,27 @@
 
 ## 执行步骤
 
-### 步骤 1：运行覆盖率分析
+### 步骤 1：读取 Maven 配置
 
-```bash
-mvn clean test jacoco:report
+**必须从 `DT_AGENTS.md` 读取覆盖率命令，禁止硬编码**：
+
+```
+if (DT_AGENTS.md 不存在) {
+  执行 /init-dt
+}
+
+从 DT_AGENTS.md 读取覆盖率命令
 ```
 
-解析 `target/site/jacoco/jacoco.xml`。
+**禁止事项**：
+- ❌ 不准使用默认的 `mvn clean test jacoco:report`
+- ✅ 必须使用 DT_AGENTS.md 中的命令
 
-### 步骤 2：识别低覆盖区域
+### 步骤 2：调用 java-coverage 技能
+
+加载 `java-coverage` 技能分析覆盖率，解析报告。
+
+### 步骤 3：识别低覆盖区域
 
 按优先级排序：
 
@@ -35,7 +47,7 @@ mvn clean test jacoco:report
 - `METHOD` - 按方法覆盖率排序，优先处理未覆盖的方法
 - `BRANCH` - 按分支覆盖率排序，优先处理未覆盖的分支
 
-### 步骤 3：价值评估
+### 步骤 4：价值评估
 
 对每个未覆盖代码评估价值：
 
@@ -45,7 +57,7 @@ mvn clean test jacoco:report
 | 中 | Controller、工具类 | ⭐⭐ |
 | 低 | DTO、Entity、配置类 | ⭐ |
 
-### 步骤 4：生成补充测试计划
+### 步骤 5：生成补充测试计划
 
 ```
 📊 覆盖率补齐计划
@@ -67,7 +79,7 @@ mvn clean test jacoco:report
 预计覆盖率提升: +30%
 ```
 
-### 步骤 5：批量生成测试
+### 步骤 6：批量生成测试
 
 按优先级依次生成：
 
@@ -76,9 +88,9 @@ mvn clean test jacoco:report
 3. 如未达标，继续处理中价值（⭐⭐）
 4. 重复直到达标或达到 limit
 
-### 步骤 6：验证覆盖率
+### 步骤 7：验证覆盖率
 
-重新运行覆盖率报告，验证提升效果。
+使用 DT_AGENTS.md 中的命令重新运行覆盖率报告，验证提升效果。
 
 ## 输出格式
 
