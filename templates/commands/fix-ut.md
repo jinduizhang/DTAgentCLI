@@ -142,41 +142,32 @@ task-start
 
 ---
 
-## 子模块项目处理
+## 目录级测试运行
 
-### 识别子模块
-
-从 `DT_AGENTS.md` 读取子模块信息：
+Maven 使用 `-Dtest` 参数按包名运行测试：
 
 ```
-## 项目结构
+# 运行指定包下的所有测试
+-Dtest="com.example.service.*"
 
-模块:
-- module-a
-- module-b
+# 运行指定包及其子包的所有测试（推荐）
+-Dtest="com.example.service.**"
 
-测试路径:
-- module-a/src/test/java
-- module-b/src/test/java
+# 使用路径形式
+-Dtest="com/example/service/*"
 ```
 
-### 跨模块测试运行
+**通配符说明**：
+- `*` - 匹配当前包
+- `**` - 匹配当前包及所有子包
 
+**示例**：
 ```
-# 运行指定模块的测试
-mvn test -pl module-a -Dtest="com.example.*"
+# 运行 service 包下的测试
+mvn test -Dtest="com.example.service.*"
 
-# 运行所有模块的测试
-mvn test -Dtest="com.example.*"
-```
-
-### 任务队列包含模块信息
-
-```
-task-create-files '[
-  {"filename": "module-a/src/test/java/OrderServiceTest.java", "prompt": "..."},
-  {"filename": "module-b/src/test/java/PaymentServiceTest.java", "prompt": "..."}
-]'
+# 运行 service 包及其子包的测试
+mvn test -Dtest="com.example.service.**"
 ```
 
 ---
