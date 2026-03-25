@@ -462,12 +462,25 @@ mvn test-compile${customArgs ? ' ' + customArgs : ''}
 # 运行单个测试
 mvn test -Dtest={ClassName}${customArgs ? ' ' + customArgs : ''}
 
+# 运行目录测试（包级）
+mvn test -Dtest="{package}.*"${customArgs ? ' ' + customArgs : ''}
+
 # 运行所有测试
 mvn test${customArgs ? ' ' + customArgs : ''}
 
 # 覆盖率报告
 mvn jacoco:report${customArgs ? ' ' + customArgs : ''}
 \`\`\`
+
+## 项目结构
+
+\`\`\`
+测试路径: src/test/java
+\`\`\`
+
+**子模块项目**：
+- 如有多模块，运行测试时添加 \`-pl {module}\` 指定模块
+- 示例: \`mvn test -pl module-a -Dtest="{package}.*"\`
 
 ## 测试用例规范
 

@@ -31,7 +31,7 @@ description: 修复失败的测试 - 单个测试类或批量修复
 | `ClassName` | 测试类 | 直接修复 |
 | `ClassName#method` | 测试方法 | 直接修复 |
 | `path/to/Test.java` | 测试文件 | 直接修复 |
-| `path/to/dir` | 测试目录 | 批量修复（TaskManager） |
+| `path/to/dir` | 测试目录 | 批量修复 |
 
 **识别逻辑**：
 - 以 `.java` 结尾或包含 `#` → 单个测试类/方法
@@ -65,7 +65,7 @@ description: 修复失败的测试 - 单个测试类或批量修复
 
 ---
 
-## 批量测试修复
+## 批量测试修复（目录级）
 
 **输入**：
 
@@ -73,57 +73,73 @@ description: 修复失败的测试 - 单个测试类或批量修复
 /fix-ut src/test/java/service
 ```
 
-**执行流程**：
+### 执行流程
 
-### 1. 读取 Maven 配置
+#### 1. 读取 Maven 配置
 
-先读取 `DT_AGENTS.md` 获取项目 Maven 配置：
-
-- `settings` - 自定义 settings.xml 路径
-- `profiles` - 激活的 profiles
-- `jvmArgs` - JVM 参数
-
-### 2. 整体编译验证
-
-根据配置执行编译：
+从 `DT_AGENTS.md` 读取：
 
 ```
-# 基础命令
-mvn test-compile
+## Maven 命令
 
-# 带自定义 settings
-mvn test-compile -s /path/to/settings.xml
+# 编译命令
+mvn test-compile -s /path/to/settings.xml -Pdev
 
-# 带 profile
-mvn test-compile -Pdev
+# 单个测试
+mvn test -Dtest={ClassName} -s /path/to/settings.xml -Pdev
+
+# 目录测试（包级）
+mvn test -Dtest="com.example.service.*" -s /path/to/settings.xml -Pdev
 ```
 
-**为什么先编译？**
+**如果 DT_AGENTS.md 不存在**，先执行 `/init-dt`。
 
-- 多个测试文件可能存在编译错误
-- 编译错误会影响后续测试运行
-- 先修复编译错误，再修复运行时错误
+#### 2. 编译验证
 
-### 3. 修复编译错误
-
-如果有编译错误，加载 `fix-java-ut` 逐个修复，直到编译通过。
-
-### 4. 扫描测试文件
-
-扫描目录获取所有 `*Test.java` 文件。
-
-### 5. 创建任务队列
+使用 DT_AGENTS.md 中的编译命令：
 
 ```
-task-create 
-  dir="{dir}" 
-  ext="java"
-  pattern="*Test.java"
-  batchSize=1
-  prompt="加载 fix-java-ut 技能修复测试"
+mvn test-compile -s /path/to/settings.xml -Pdev
 ```
 
-### 6. 启动任务
+**编译失败**：
+- 解析编译错误
+- 找出有编译错误的测试文件
+- 逐个调用 `fix-java-ut` 修复
+- 循环直到编译通过
+
+#### 3. 运行目录测试
+
+使用 DT_AGENTS.md 中的目录测试命令：
+
+```
+mvn test -Dtest="com.example.service.*" -s /path/to/settings.xml -Pdev
+```
+
+**获取失败测试类**：
+- 解析测试报告
+- 提取失败的测试类名列表
+- 记录每个类的失败原因
+
+#### 4. 创建修复任务队列
+
+**只针对失败的测试类**：
+
+```
+失败的测试类:
+- OrderServiceTest (3 failures)
+- PaymentServiceTest (1 failure)
+- UserServiceTest (2 failures)
+
+创建任务队列:
+task-create-files '[
+  {"filename": "src/test/java/service/OrderServiceTest.java", "prompt": "加载 fix-java-ut 技能修复测试", "metadata": {"failures": 3}},
+  {"filename": "src/test/java/service/PaymentServiceTest.java", "prompt": "加载 fix-java-ut 技能修复测试", "metadata": {"failures": 1}},
+  {"filename": "src/test/java/service/UserServiceTest.java", "prompt": "加载 fix-java-ut 技能修复测试", "metadata": {"failures": 2}}
+]'
+```
+
+#### 5. 启动任务
 
 ```
 task-start
@@ -133,56 +149,73 @@ task-start
 
 ---
 
-## 启动后的操作
+## 子模块项目处理
 
-### 查看进度
+### 识别子模块
 
-```
-/task-status-dt
-```
-
-### 查看执行详情
+从 `DT_AGENTS.md` 读取子模块信息：
 
 ```
-/sessions
+## 项目结构
+
+模块:
+- module-a
+- module-b
+
+测试路径:
+- module-a/src/test/java
+- module-b/src/test/java
 ```
 
-### 停止任务
+### 跨模块测试运行
 
 ```
-task-stop
+# 运行指定模块的测试
+mvn test -pl module-a -Dtest="com.example.*"
+
+# 运行所有模块的测试
+mvn test -Dtest="com.example.*"
+```
+
+### 任务队列包含模块信息
+
+```
+task-create-files '[
+  {"filename": "module-a/src/test/java/OrderServiceTest.java", "prompt": "..."},
+  {"filename": "module-b/src/test/java/PaymentServiceTest.java", "prompt": "..."}
+]'
 ```
 
 ---
 
-## 批量输出示例
+## 输出示例
 
 ```
 📋 批量测试修复
 
 步骤 1: 读取 Maven 配置
 配置文件: DT_AGENTS.md
-settings: /path/to/settings.xml
-profiles: dev
+编译命令: mvn test-compile -s /path/to/settings.xml -Pdev
+目录测试命令: mvn test -Dtest="com.example.service.*"
 
-步骤 2: 整体编译验证
-运行: mvn test-compile -s /path/to/settings.xml -Pdev
-结果: ❌ 编译失败
-
-编译错误:
-- OrderServiceTest.java: 缺少 import
-- PaymentServiceTest.java: 类型不匹配
-
-步骤 3: 修复编译错误
-[1/2] OrderServiceTest.java ✅
-[2/2] PaymentServiceTest.java ✅
-
-步骤 4: 重新编译验证
+步骤 2: 编译验证
 运行: mvn test-compile -s /path/to/settings.xml -Pdev
 结果: ✅ 编译通过
 
-步骤 5: 创建修复任务队列
-测试文件: 5 个
+步骤 3: 运行目录测试
+运行: mvn test -Dtest="com.example.service.*" -s /path/to/settings.xml -Pdev
+结果: ❌ 5 个测试类失败
+
+失败测试类:
+- OrderServiceTest: 3 failures
+- PaymentServiceTest: 1 failure
+- UserServiceTest: 2 failures
+- InventoryServiceTest: 1 failure
+- NotificationServiceTest: 1 failure
+
+步骤 4: 创建修复任务队列
+任务数: 5 个
+并行数: 1
 
 ✅ 任务队列已启动
 
@@ -194,9 +227,11 @@ profiles: dev
 ⚠️ 请勿关闭当前窗口
 ```
 
+---
+
 ## 注意事项
 
-1. **目录级修复先编译验证**，避免编译错误影响后续
-2. 单个测试类直接修复，无任务队列
-3. 自动识别参数类型，无需额外指定
-4. 编译错误优先修复，再修复运行时错误
+1. **先编译再运行**：确保代码可编译后再运行测试
+2. **只修复失败测试**：不修复已通过的测试，节省时间
+3. **子模块支持**：正确处理多模块项目的测试路径
+4. **配置从 DT_AGENTS.md 读取**：不使用默认命令
