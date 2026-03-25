@@ -77,30 +77,27 @@ description: 修复失败的测试 - 单个测试类或批量修复
 
 #### 1. 读取 Maven 配置
 
-从 `DT_AGENTS.md` 读取：
+**必须从 `DT_AGENTS.md` 读取 Maven 命令，禁止硬编码**：
 
 ```
-## Maven 命令
+if (DT_AGENTS.md 不存在) {
+  执行 /init-dt
+}
 
-# 编译命令
-mvn test-compile -s /path/to/settings.xml -Pdev
-
-# 单个测试
-mvn test -Dtest={ClassName} -s /path/to/settings.xml -Pdev
-
-# 目录测试（包级）
-mvn test -Dtest="com.example.service.*" -s /path/to/settings.xml -Pdev
+从 DT_AGENTS.md 读取:
+- 编译命令
+- 单个测试命令
+- 目录测试命令（包级）
 ```
 
-**如果 DT_AGENTS.md 不存在**，先执行 `/init-dt`。
+**禁止事项**：
+- ❌ 不准使用默认的 `mvn test-compile`
+- ❌ 不准使用默认的 `mvn test`
+- ✅ 必须使用 DT_AGENTS.md 中的命令
 
 #### 2. 编译验证
 
-使用 DT_AGENTS.md 中的编译命令：
-
-```
-mvn test-compile -s /path/to/settings.xml -Pdev
-```
+使用从 DT_AGENTS.md 读取的编译命令。
 
 **编译失败**：
 - 解析编译错误
@@ -110,11 +107,7 @@ mvn test-compile -s /path/to/settings.xml -Pdev
 
 #### 3. 运行目录测试
 
-使用 DT_AGENTS.md 中的目录测试命令：
-
-```
-mvn test -Dtest="com.example.service.*" -s /path/to/settings.xml -Pdev
-```
+使用从 DT_AGENTS.md 读取的目录测试命令。
 
 **获取失败测试类**：
 - 解析测试报告
