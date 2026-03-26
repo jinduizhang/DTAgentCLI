@@ -142,6 +142,7 @@ async function installComponents(
     path.join(opencodeDir, 'plugins'),
     path.join(opencodeDir, 'agents'),
     path.join(opencodeDir, 'commands'),
+    path.join(opencodeDir, 'core'),  // 新增：core 目录
   ];
 
   for (const dir of dirs) {
@@ -168,6 +169,14 @@ async function installComponents(
   const pluginDest = path.join(opencodeDir, 'plugins', 'task-manager.ts');
   if (fs.existsSync(pluginSrc)) {
     fs.copyFileSync(pluginSrc, pluginDest);
+  }
+
+  // Copy core modules (新增：工作空间管理器)
+  const coreSrc = path.join(templatesDir, 'core', 'workspace-manager.ts');
+  const coreDest = path.join(opencodeDir, 'core', 'workspace-manager.ts');
+  if (fs.existsSync(coreSrc)) {
+    fs.copyFileSync(coreSrc, coreDest);
+    console.log(chalk.gray('  ✓ 已安装工作空间管理器'));
   }
 
   // Copy agents

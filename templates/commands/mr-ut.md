@@ -10,6 +10,7 @@ description: MR 变更 UT 分析 - 基于 Git Diff 分析变更代码并生成�
 
 - `--base BRANCH` - 基准分支（默认 main）
 - `--target BRANCH` - 目标分支（默认当前分支）
+- `--batch-size <n>` - 并行数，默认为 1（串行），设为 4 可并行执行 4 个任务（可选）
 
 ## 使用
 
@@ -17,6 +18,9 @@ description: MR 变更 UT 分析 - 基于 Git Diff 分析变更代码并生成�
 /mr-ut
 /mr-ut --base develop
 /mr-ut --base main --target feature/order
+
+# 并行执行
+/mr-ut --base main --batch-size 4
 ```
 
 ## 执行流程
@@ -53,18 +57,28 @@ git diff origin/{base}...HEAD -- path/to/File.java
 
 使用 `task-create-files` 创建任务队列，每个任务执行端到端流程：
 
+**参数**:
+- `files`: JSON 格式的文件列表
+- `batchSize`: 并行数（默认 1，可通过 `--batch-size` 指定）
+
 ```json
-[
-  {
-    "filename": "src/main/java/OrderService.java",
-    "prompt": "【MR 变更测试生成】\n\n变更类型：修改\n变更方法：+createOrder(), ~updateOrder()\n\n执行端到端流程：\n1. 加载 generate-java-ut 生成测试\n2. 加载 fix-java-ut 修复测试\n3. 加载 java-coverage 提升覆盖率",
-    "metadata": {
-      "changeType": "modified",
-      "methods": ["+createOrder", "~updateOrder"]
+// task-create-files 参数
+{
+  "files": [
+    {
+      "filename": "src/main/java/OrderService.java",
+      "prompt": "【MR 变更测试生成】\n\n变更类型：修改\n变更方法：+createOrder(), ~updateOrder()\n\n执行端到端流程：\n1. 加载 generate-java-ut 生成测试\n2. 加载 fix-java-ut 修复测试\n3. 加载 java-coverage 提升覆盖率",
+      "metadata": {
+        "changeType": "modified",
+        "methods": ["+createOrder", "~updateOrder"]
+      }
     }
-  }
-]
+  ],
+  "batchSize": 1  // 可通过 --batch-size 指定
+}
 ```
+
+**注意**: 当 batchSize > 1 时，系统会自动创建工作空间隔离，避免 Maven 编译冲突。
 
 ### 5. 启动任务并停止
 
@@ -128,7 +142,34 @@ task-stop
 ✅ 任务队列已启动（文件列表模式）
 
 总任务: 3
-执行方式: 串行（每个任务包含生成→修复→覆盖率提升）
+执行方式: 串行（batchSize=1）
+
+📌 后续操作：
+- 查看进度: /task-status-dt
+- 查看详情: /sessions
+- 停止任务: task-stop
+
+⚠️ 请勿关闭当前窗口
+```
+
+### 并行执行示例
+
+```
+📋 MR 变更 UT 分析
+
+基准分支: main
+目标分支: feature/order-service
+
+变更统计:
+- 新增文件: 2
+- 修改文件: 3
+- 删除文件: 1
+
+✅ 任务队列已启动（文件列表模式）
+
+总任务: 3
+执行方式: 并行（batchSize=4）
+隔离模式: 工作空间隔离（自动启用）
 
 📌 后续操作：
 - 查看进度: /task-status-dt

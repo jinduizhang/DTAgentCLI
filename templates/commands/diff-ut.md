@@ -12,6 +12,7 @@ description: 本地变更 UT 分析 - 基于 Git Diff 分析本地变更并生�
 
 - `--base BRANCH` - 基准分支（可选，默认 main）
 - 不传 `--base` - 分析工作区变更（未 commit 的修改）
+- `--batch-size <n>` - 并行数，默认为 1（串行），设为 4 可并行执行 4 个任务（可选）
 
 ## 使用
 
@@ -19,6 +20,9 @@ description: 本地变更 UT 分析 - 基于 Git Diff 分析本地变更并生�
 /diff-ut                        # 工作区变更（未 commit）
 /diff-ut --base main            # main...HEAD（已 commit 未 push）
 /diff-ut --base develop         # develop...HEAD
+
+# 并行执行
+/diff-ut --base main --batch-size 4
 ```
 
 ## 与 /mr-ut 的区别
@@ -53,18 +57,28 @@ git diff --name-only -- "*.java"
 
 使用 `task-create-files` 创建任务队列，每个任务执行端到端流程：
 
+**参数**:
+- `files`: JSON 格式的文件列表
+- `batchSize`: 并行数（默认 1，可通过 `--batch-size` 指定）
+
 ```json
-[
-  {
-    "filename": "src/main/java/OrderService.java",
-    "prompt": "【变更测试生成】\n\n变更类型：修改\n变更方法：+createOrder(), ~updateOrder()\n\n执行端到端流程：\n1. 加载 generate-java-ut 生成测试\n2. 加载 fix-java-ut 修复测试\n3. 加载 java-coverage 提升覆盖率",
-    "metadata": {
-      "changeType": "modified",
-      "methods": ["+createOrder", "~updateOrder"]
+// task-create-files 参数
+{
+  "files": [
+    {
+      "filename": "src/main/java/OrderService.java",
+      "prompt": "【变更测试生成】\n\n变更类型：修改\n变更方法：+createOrder(), ~updateOrder()\n\n执行端到端流程：\n1. 加载 generate-java-ut 生成测试\n2. 加载 fix-java-ut 修复测试\n3. 加载 java-coverage 提升覆盖率",
+      "metadata": {
+        "changeType": "modified",
+        "methods": ["+createOrder", "~updateOrder"]
+      }
     }
-  }
-]
+  ],
+  "batchSize": 1  // 可通过 --batch-size 指定
+}
 ```
+
+**注意**: 当 batchSize > 1 时，系统会自动创建工作空间隔离，避免 Maven 编译冲突。
 
 ### 4. 启动任务
 

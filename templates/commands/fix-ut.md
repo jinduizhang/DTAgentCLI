@@ -9,6 +9,7 @@ description: 修复失败的测试 - 单个测试类或批量修复
 ## 参数
 
 - `{target}` - 测试类、测试方法或测试目录（必需）
+- `--batch-size <n>` - 并行数，默认为 1（串行），设为 4 可并行修复 4 个测试类（可选，仅目录模式有效）
 
 ## 使用
 
@@ -22,6 +23,9 @@ description: 修复失败的测试 - 单个测试类或批量修复
 
 # 批量修复（目录）
 /fix-ut src/test/java/service
+
+# 批量修复（并行）
+/fix-ut src/test/java/service --batch-size 4
 ```
 
 ## 参数识别规则
@@ -129,8 +133,9 @@ task-create-files '[
   {"filename": "src/test/java/service/OrderServiceTest.java", "prompt": "加载 fix-java-ut 技能修复测试", "metadata": {"failures": 3}},
   {"filename": "src/test/java/service/PaymentServiceTest.java", "prompt": "加载 fix-java-ut 技能修复测试", "metadata": {"failures": 1}},
   {"filename": "src/test/java/service/UserServiceTest.java", "prompt": "加载 fix-java-ut 技能修复测试", "metadata": {"failures": 2}}
-]'
-```
+]' batchSize=1  # 可通过 --batch-size 指定
+
+**注意**: 当 batchSize > 1 时，系统会自动创建工作空间隔离，避免 Maven 编译冲突。
 
 #### 5. 启动任务
 
@@ -199,7 +204,47 @@ mvn test -Dtest="com.example.service.**"
 
 步骤 4: 创建修复任务队列
 任务数: 5 个
-并行数: 1
+并行数: 1（串行）
+
+✅ 任务队列已启动
+
+📌 后续操作：
+- 查看进度: /task-status-dt
+- 查看详情: /sessions
+- 停止任务: task-stop
+
+⚠️ 请勿关闭当前窗口
+```
+
+### 并行修复示例
+
+```
+📋 批量测试修复
+
+步骤 1: 读取 Maven 配置
+配置文件: DT_AGENTS.md
+编译命令: mvn test-compile -s /path/to/settings.xml -Pdev
+目录测试命令: mvn test -Dtest="com.example.service.*"
+
+步骤 2: 编译验证
+运行: mvn test-compile -s /path/to/settings.xml -Pdev
+结果: ✅ 编译通过
+
+步骤 3: 运行目录测试
+运行: mvn test -Dtest="com.example.service.*" -s /path/to/settings.xml -Pdev
+结果: ❌ 5 个测试类失败
+
+失败测试类:
+- OrderServiceTest: 3 failures
+- PaymentServiceTest: 1 failure
+- UserServiceTest: 2 failures
+- InventoryServiceTest: 1 failure
+- NotificationServiceTest: 1 failure
+
+步骤 4: 创建修复任务队列
+任务数: 5 个
+并行数: 4（并行）
+隔离模式: 工作空间隔离（自动启用）
 
 ✅ 任务队列已启动
 
