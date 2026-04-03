@@ -190,6 +190,14 @@ export const TaskManagerPlugin: Plugin = async ({ client, directory }) => {
       
       const summary = await getSessionSummary(sessionId)
       
+      // 任务成功完成后，复制测试文件到原项目（在释放槽位之前）
+      if (queue.batchSize > 1 && queue.workspacePool && slotIndex !== null) {
+        const copied = queue.workspacePool.copyTestFiles(slotIndex, directory)
+        if (!copied) {
+          console.error(`[TaskManager] 复制测试文件失败: 槽位 ${slotIndex}`)
+        }
+      }
+      
       // 任务完成后释放槽位（复用，不删除）
       if (queue.batchSize > 1 && queue.workspacePool && slotIndex !== null) {
         queue.workspacePool.releaseSlot(slotIndex)
@@ -197,7 +205,7 @@ export const TaskManagerPlugin: Plugin = async ({ client, directory }) => {
       
       return { success: true, summary }
     } catch (e) {
-      // 任务失败后也释放槽位
+      // 任务失败后也释放槽位（不复制测试文件）
       if (queue.batchSize > 1 && queue.workspacePool && slotIndex !== null) {
         queue.workspacePool.releaseSlot(slotIndex)
       }

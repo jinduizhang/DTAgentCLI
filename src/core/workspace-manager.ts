@@ -384,6 +384,74 @@ export class WorkspacePool {
       return false
     }
   }
+
+  /**
+   * 复制槽位中的测试文件到原项目
+   *
+   * @param slotIndex 槽位索引
+   * @param projectRoot 原项目根目录
+   * @returns boolean 是否成功
+   */
+  copyTestFiles(slotIndex: number, projectRoot: string): boolean {
+    const slot = this.slots.get(slotIndex)
+    if (!slot) {
+      console.error(`[WorkspacePool] 槽位 ${slotIndex} 不存在`)
+      return false
+    }
+
+    const sourceDir = path.join(slot.path, "src", "test", "java")
+    const targetDir = path.join(projectRoot, "src", "test", "java")
+
+    // 检查源目录是否存在
+    if (!fs.existsSync(sourceDir)) {
+      // 没有测试文件，不算失败
+      return true
+    }
+
+    try {
+      // 确保目标目录存在
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true })
+      }
+
+      // 递归复制目录
+      this.copyDirectoryRecursive(sourceDir, targetDir)
+
+      console.log(`[WorkspacePool] 测试文件已复制: ${sourceDir} -> ${targetDir}`)
+      return true
+    } catch (error) {
+      console.error(`[WorkspacePool] 复制测试文件失败:`, error)
+      return false
+    }
+  }
+
+  /**
+   * 递归复制目录
+   *
+   * @param source 源目录
+   * @param target 目标目录
+   */
+  private copyDirectoryRecursive(source: string, target: string): void {
+    // 确保目标目录存在
+    if (!fs.existsSync(target)) {
+      fs.mkdirSync(target, { recursive: true })
+    }
+
+    const entries = fs.readdirSync(source, { withFileTypes: true })
+
+    for (const entry of entries) {
+      const sourcePath = path.join(source, entry.name)
+      const targetPath = path.join(target, entry.name)
+
+      if (entry.isDirectory()) {
+        // 递归复制子目录
+        this.copyDirectoryRecursive(sourcePath, targetPath)
+      } else {
+        // 复制文件
+        fs.copyFileSync(sourcePath, targetPath)
+      }
+    }
+  }
 }
 
 // 导出工厂函数
