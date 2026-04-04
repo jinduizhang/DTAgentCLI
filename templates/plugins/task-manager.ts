@@ -4,17 +4,7 @@ import * as fs from "fs"
 import * as path from "path"
 
 // 导入 WorkspacePool（工作空间池）
-import { WorkspacePool, createWorkspacePool } from "../core/workspace-manager"
-
-// 导入 Maven 配置和解析函数
-import {
-  loadMavenConfig,
-  buildMavenArgs,
-  parseTestResult,
-  parseCompileResult,
-  parseCoverageResult
-} from "../core/maven-config"
-import { execSync } from "child_process"
+import { WorkspacePool, createWorkspacePool } from "./workspace-manager"
 
 /**
  * OpenCode Task Manager Plugin
@@ -549,83 +539,6 @@ export const TaskManagerPlugin: Plugin = async ({ client, directory }) => {
           await client.tui.openSessions()
           return "✅ 已打开 Session 选择器"
         },
-      }),
-
-      // Maven 工具集
-      "maven-compile": tool({
-        description: "编译测试代码",
-        args: {},
-        async execute(args, context) {
-          const config = loadMavenConfig(context.directory)
-          const mvnArgs = buildMavenArgs(config, ["test-compile"])
-
-          try {
-            const output = execSync(`mvn ${mvnArgs.join(" ")}`, {
-              cwd: context.directory,
-              encoding: "utf-8",
-              timeout: config.maven.timeout || 300000,
-              stdio: ["pipe", "pipe", "pipe"]
-            })
-            return parseCompileResult(output)
-          } catch (error: any) {
-            return parseCompileResult(error.stdout || error.message)
-          }
-        }
-      }),
-
-      "maven-test": tool({
-        description: "运行测试（支持项目级/目录级/类级）",
-        args: {
-          target: tool.schema.string().optional().describe("测试目标：类名或包路径（项目级时不需要）"),
-          level: tool.schema.enum(["project", "package", "class"]).optional().default("project").describe("测试级别")
-        },
-        async execute(args, context) {
-          const config = loadMavenConfig(context.directory)
-
-          let testArg: string
-          if (args.level === "project" || !args.target) {
-            testArg = "test"
-          } else if (args.level === "package") {
-            testArg = `test -Dtest="${args.target}.*"`
-          } else {
-            testArg = `test -Dtest=${args.target}`
-          }
-
-          const mvnArgs = buildMavenArgs(config, testArg.split(" "))
-
-          try {
-            const output = execSync(`mvn ${mvnArgs.join(" ")}`, {
-              cwd: context.directory,
-              encoding: "utf-8",
-              timeout: config.maven.timeout || 300000,
-              stdio: ["pipe", "pipe", "pipe"]
-            })
-            return parseTestResult(output)
-          } catch (error: any) {
-            return parseTestResult(error.stdout || error.message)
-          }
-        }
-      }),
-
-      "maven-coverage": tool({
-        description: "生成覆盖率报告",
-        args: {},
-        async execute(args, context) {
-          const config = loadMavenConfig(context.directory)
-          const mvnArgs = buildMavenArgs(config, ["jacoco:report"])
-
-          try {
-            const output = execSync(`mvn ${mvnArgs.join(" ")}`, {
-              cwd: context.directory,
-              encoding: "utf-8",
-              timeout: config.maven.timeout || 300000,
-              stdio: ["pipe", "pipe", "pipe"]
-            })
-            return parseCoverageResult(output, context.directory)
-          } catch (error: any) {
-            return parseCoverageResult(error.stdout || "", context.directory)
-          }
-        }
       }),
     },
   }

@@ -142,7 +142,7 @@ async function installComponents(
     path.join(opencodeDir, 'plugins'),
     path.join(opencodeDir, 'agents'),
     path.join(opencodeDir, 'commands'),
-    path.join(opencodeDir, 'core'),  // 新增：core 目录
+    path.join(opencodeDir, 'plugins'),
   ];
 
   for (const dir of dirs) {
@@ -171,12 +171,20 @@ async function installComponents(
     fs.copyFileSync(pluginSrc, pluginDest);
   }
 
-  // Copy core modules (新增：工作空间管理器)
-  const coreSrc = path.join(templatesDir, 'core', 'workspace-manager.ts');
-  const coreDest = path.join(opencodeDir, 'core', 'workspace-manager.ts');
-  if (fs.existsSync(coreSrc)) {
-    fs.copyFileSync(coreSrc, coreDest);
+  // 复制 workspace-manager.ts 到 plugins 目录
+  const workspaceSrc = path.join(templatesDir, 'plugins', 'workspace-manager.ts');
+  const workspaceDest = path.join(opencodeDir, 'plugins', 'workspace-manager.ts');
+  if (fs.existsSync(workspaceSrc)) {
+    fs.copyFileSync(workspaceSrc, workspaceDest);
     console.log(chalk.gray('  ✓ 已安装工作空间管理器'));
+  }
+  
+  // 复制 maven-tools.ts 到 plugins 目录
+  const mavenToolsSrc = path.join(templatesDir, 'plugins', 'maven-tools.ts');
+  const mavenToolsDest = path.join(opencodeDir, 'plugins', 'maven-tools.ts');
+  if (fs.existsSync(mavenToolsSrc)) {
+    fs.copyFileSync(mavenToolsSrc, mavenToolsDest);
+    console.log(chalk.gray('  ✓ 已安装 Maven 工具'));
   }
 
   // Copy agents
@@ -525,6 +533,9 @@ void methodName_scenario_expectedResult() {
   fs.writeFileSync(configPath, content);
   console.log(chalk.green('  ✓ 已生成 DT_AGENTS.md'));
   
+  // 生成 .dtagent/config.json 配置文件
+  generateDtagentConfig(projectDir, mavenConfig);
+  
   if (mavenConfig.source) {
     console.log(chalk.gray(`  Maven 配置来源: ${mavenConfig.source}`));
   }
@@ -580,6 +591,45 @@ function extractMavenConfig(projectDir: string): MavenConfig {
   }
   
   return config;
+}
+
+/**
+ * 生成 .dtagent/config.json 配置文件
+ */
+function generateDtagentConfig(projectDir: string, mavenConfig: MavenConfig): void {
+  const dtagentDir = path.join(projectDir, '.dtagent');
+  const configPath = path.join(dtagentDir, 'config.json');
+  
+  // 确保 .dtagent 目录存在
+  if (!fs.existsSync(dtagentDir)) {
+    fs.mkdirSync(dtagentDir, { recursive: true });
+  }
+  
+  // 读取已保存的 Maven 配置（如果有）
+  let savedM2Repo: string | undefined;
+  try {
+    const { getMavenConfig } = require('../utils/dependency');
+    const depConfig = getMavenConfig();
+    if (depConfig?.localRepo) {
+      savedM2Repo = depConfig.localRepo;
+    }
+  } catch {
+    // 忽略读取失败
+  }
+  
+  // 构建配置对象
+  const config = {
+    maven: {
+      repoPath: savedM2Repo || "",
+      settings: mavenConfig.settings || "",
+      profiles: mavenConfig.profiles || "",
+      jvmArgs: mavenConfig.jvmArgs || "",
+      timeout: 300000  // 默认 5 分钟
+    }
+  };
+  
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  console.log(chalk.green('  ✓ 已生成 .dtagent/config.json'));
 }
 
 /**
