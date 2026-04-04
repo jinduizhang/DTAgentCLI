@@ -357,12 +357,110 @@ async function executeTask(index) {
 /task-start
 ```
 
+## 测试文件自动复制
+
+### 功能说明
+
+任务在槽位中生成测试文件后，**自动复制到原项目目录**，确保测试文件持久化保存。
+
+### 复制流程
+
+```
+任务执行流程:
+├── 1. acquireSlot() - 获取空闲槽位
+├── 2. resetSlot() - 清空 target/ 和 src/test/
+├── 3. Agent 在槽位中生成测试文件
+│   └── slot-{n}/src/test/java/com/example/MyTest.java
+├── 4. 任务成功完成
+├── 5. copyTestFiles() - 复制测试文件到原项目
+│   └── 从 slot-{n}/src/test/java → project/src/test/java
+├── 6. releaseSlot() - 释放槽位（保留 src/pom/.m2）
+└── 7. 槽位复用，等待下一个任务
+```
+
+### 复制逻辑
+
+**源目录**: `slot-{index}/src/test/java`  
+**目标目录**: `projectRoot/src/test/java`  
+**复制方式**: 递归复制，保持包路径结构
+
+```typescript
+// 伪代码
+function copyTestFiles(slotIndex, projectRoot) {
+  const sourceDir = slot.path + "/src/test/java"
+  const targetDir = projectRoot + "/src/test/java"
+  
+  // 递归复制目录
+  copyDirectoryRecursive(sourceDir, targetDir)
+}
+
+// 递归复制函数
+function copyDirectoryRecursive(source, target) {
+  for (const entry of fs.readdir(source)) {
+    if (entry.isDirectory()) {
+      copyDirectoryRecursive(sourcePath, targetPath)
+    } else {
+      fs.copyFileSync(sourcePath, targetPath)
+    }
+  }
+}
+```
+
+### 复制时机
+
+**触发条件**:
+- 任务成功完成（`success: true`）
+- batchSize > 1（启用工作空间池）
+- 在释放槽位之前执行
+
+**不复制的情况**:
+- 任务失败（失败时只释放槽位，不复制）
+- batchSize = 1（串行模式，无需复制）
+- 源目录不存在（没有测试文件）
+
+### 错误处理
+
+```typescript
+// 复制失败不影响任务结果
+const copied = workspacePool.copyTestFiles(slotIndex, directory)
+if (!copied) {
+  console.error(`[TaskManager] 复制测试文件失败: 槽位 ${slotIndex}`)
+  // 继续执行，任务仍标记为成功
+}
+```
+
+**特点**:
+- ✅ 复制失败只记录日志，不影响任务成功状态
+- ✅ 槽位中的测试文件保留（备份）
+- ✅ 下次任务复用槽位时会清空 test/ 目录
+
+### 示例
+
+```
+槽位 0 执行任务 1:
+├── 槽位目录: .dtagent/workspace-pool/slot-0/
+├── 生成测试文件: slot-0/src/test/java/com/example/UserServiceTest.java
+├── 复制后: project/src/test/java/com/example/UserServiceTest.java
+└── 槽位释放: 保留 src/pom/.m2，清空 target/test
+
+槽位 0 执行任务 2（复用）:
+├── 槽位目录: .dtagent/workspace-pool/slot-0/
+├── 生成测试文件: slot-0/src/test/java/com/example/OrderServiceTest.java
+├── 复制后: project/src/test/java/com/example/OrderServiceTest.java
+└── 槽位释放: 保留 src/pom/.m2，清空 target/test
+
+最终:
+├── project/src/test/java/com/example/UserServiceTest.java (来自任务 1)
+└── project/src/test/java/com/example/OrderServiceTest.java (来自任务 2)
+```
+
 ## 注意事项
 
 1. **磁盘空间**: 每个工作空间占用约 100-500MB（首次编译后）
 2. **清理机制**: 任务完成后自动清理，异常时 task-stop 会强制清理
 3. **Maven 参数**: Agent 必须在 prompt 中使用 `-Dmaven.repo.local` 参数
 4. **Windows 权限**: junction 软链接不需要管理员权限
+5. **测试文件**: 任务成功后会自动复制到原项目，无需手动处理
 
 ## 文件变更
 
@@ -370,10 +468,15 @@ async function executeTask(index) {
 - `src/core/workspace-manager.ts` - 工作空间管理器
 
 ### 修改文件
-- `templates/plugins/task-manager.ts` - 集成工作空间隔离
+- `templates/plugins/task-manager.ts` - 集成工作空间隔离和测试文件复制
+
+### 新增方法
+- `WorkspacePool.copyTestFiles(slotIndex, projectRoot)` - 复制测试文件到原项目
+- `WorkspacePool.copyDirectoryRecursive(source, target)` - 递归复制目录
 
 ## 后续优化
 
 1. **依赖缓存共享**: 多个 .m2 仓库可共享已下载的依赖
 2. **预编译**: 批量任务前预编译公共代码
 3. **动态并行度**: 根据系统资源动态调整 batchSize
+4. **增量复制**: 只复制变更的测试文件，减少 IO

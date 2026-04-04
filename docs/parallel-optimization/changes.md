@@ -16,6 +16,7 @@
 - 预创建固定数量的工作空间槽位（对应 batchSize）
 - 槽位复用：只清空 test/target，保留 src/pom/.m2
 - 任务调度：空闲槽位分配给新任务
+- **测试文件复制：任务完成后自动复制测试文件到原项目**
 - 最终清理：队列结束后删除所有槽位
 
 **接口**:
@@ -24,6 +25,8 @@ class WorkspacePool {
   initialize(): Promise<boolean>           // 初始化池子
   acquireSlot(taskId: string): WorkspaceSlot | null  // 获取空闲槽位
   releaseSlot(slotIndex: number): void     // 释放槽位（复用）
+  copyTestFiles(slotIndex: number, projectRoot: string): boolean  // 复制测试文件到原项目
+  copyDirectoryRecursive(source: string, target: string): void  // 递归复制目录
   destroy(): void                          // 销毁整个池子
 }
 ```
@@ -32,6 +35,7 @@ class WorkspacePool {
 - 使用 Windows junction 软链接（无需管理员权限）
 - 固定 batchSize 个 .m2 仓库（不是每个任务一个）
 - 槽位复用策略：只清空 test/target，秒级切换
+- **测试文件复制：任务成功后自动复制，保持包路径结构**
 - 队列结束后删除整个池子
 
 ---
@@ -61,6 +65,7 @@ class WorkspacePool {
 3. **修改 executeTask 函数**
    - 当 `batchSize > 1` 时，从池中获取空闲槽位（acquireSlot）
    - 在 prompt 中注入槽位信息和 Maven 参数
+   - **任务成功后，调用 copyTestFiles 复制测试文件到原项目**
    - 任务完成后释放槽位（releaseSlot），复用不删除
 
 4. **修改 executeAllTasks 函数**
@@ -72,6 +77,31 @@ class WorkspacePool {
 
 6. **修改 task-stop 工具**
    - 添加 `destroy()` 调用，销毁整个工作空间池
+
+**关键修改点 - 测试文件复制**:
+
+在 `executeTask` 函数中，任务成功完成后，释放槽位之前：
+
+```typescript
+// 任务成功完成后，复制测试文件到原项目（在释放槽位之前）
+if (queue.batchSize > 1 && queue.workspacePool && slotIndex !== null) {
+  const copied = queue.workspacePool.copyTestFiles(slotIndex, directory)
+  if (!copied) {
+    console.error(`[TaskManager] 复制测试文件失败: 槽位 ${slotIndex}`)
+  }
+}
+
+// 任务完成后释放槽位（复用，不删除）
+if (queue.batchSize > 1 && queue.workspacePool && slotIndex !== null) {
+  queue.workspacePool.releaseSlot(slotIndex)
+}
+```
+
+**复制时机**:
+- ✅ 任务成功完成（`success: true`）
+- ✅ batchSize > 1（启用工作空间池）
+- ✅ 在释放槽位之前执行
+- ❌ 任务失败时不复制（失败时只释放槽位）
 
 **代码示例**:
 
@@ -218,7 +248,7 @@ git checkout templates/plugins/task-manager.ts
 
 ## 版本信息
 
-- **版本**: 未发布（集成测试中）
-- **提交**: 待提交
+- **版本**: v0.1.0（已提交）
+- **提交**: b988855 - feat(task-manager): auto copy test files to project after task completion
 - **作者**: DTAgent CLI Team
-- **日期**: 2025-03-26
+- **日期**: 2025-04-04
