@@ -3,11 +3,14 @@ import { tool } from "@opencode-ai/plugin"
 import { execSync } from "child_process"
 import * as fs from "fs"
 import * as path from "path"
+import AsyncLock from "async-lock"
+
+// Global lock for Maven operations
+const mavenLock = new AsyncLock()
 
 // Maven config interface
 interface MavenConfig {
   maven: {
-    repoPath?: string
     settings?: string
     profiles?: string
     jvmArgs?: string
@@ -46,10 +49,6 @@ function loadMavenConfig(projectDir: string): MavenConfig {
 
 function buildMavenArgs(config: MavenConfig, baseArgs: string[]): string[] {
   const args = [...baseArgs, "-q"]
-  
-  if (config.maven.repoPath) {
-    args.push(`-Dmaven.repo.local=${config.maven.repoPath}`)
-  }
   
   if (config.maven.settings) {
     args.push("-s", config.maven.settings)
@@ -121,16 +120,6 @@ ${filtered}`
   }
 }
 
-function parseCompileResult(output: string): string {
-  if (output.includes("BUILD SUCCESS")) {
-    return `✅ 编译成功`
-  } else if (output.includes("BUILD FAILURE")) {
-    return `❌ 编译失败\n${filterMavenOutput(output)}`
-  } else {
-    return filterMavenOutput(output) || "✅ 编译完成"
-  }
-}
-
 function parseCoverageResult(output: string, projectDir: string): string {
   const reportPath = path.join(projectDir, "target", "site", "jacoco", "index.html")
   
@@ -146,27 +135,6 @@ function parseCoverageResult(output: string, projectDir: string): string {
 export const MavenToolsPlugin: Plugin = async ({ client, directory }) => {
   return {
     tool: {
-      "maven-compile": tool({
-        description: "编译测试代码",
-        args: {},
-        async execute(args, context) {
-          const config = loadMavenConfig(context.directory)
-          const mvnArgs = buildMavenArgs(config, ["test-compile"])
-          
-          try {
-            const output = execSync(`mvn ${mvnArgs.join(" ")}`, {
-              cwd: context.directory,
-              encoding: "utf-8",
-              timeout: config.maven.timeout || 300000,
-              stdio: ["pipe", "pipe", "pipe"]
-            })
-            return parseCompileResult(output)
-          } catch (error: any) {
-            return parseCompileResult(error.stdout || error.message)
-          }
-        }
-      }),
-
       "maven-test": tool({
         description: "运行测试（支持项目级/目录级/类级）",
         args: {
@@ -187,17 +155,19 @@ export const MavenToolsPlugin: Plugin = async ({ client, directory }) => {
           
           const mvnArgs = buildMavenArgs(config, testArg.split(" "))
           
-          try {
-            const output = execSync(`mvn ${mvnArgs.join(" ")}`, {
-              cwd: context.directory,
-              encoding: "utf-8",
-              timeout: config.maven.timeout || 300000,
-              stdio: ["pipe", "pipe", "pipe"]
-            })
-            return parseTestResult(output)
-          } catch (error: any) {
-            return parseTestResult(error.stdout || error.message)
-          }
+          return mavenLock.acquire("mvn-test", async () => {
+            try {
+              const output = execSync(`mvn ${mvnArgs.join(" ")}`, {
+                cwd: context.directory,
+                encoding: "utf-8",
+                timeout: config.maven.timeout || 300000,
+                stdio: ["pipe", "pipe", "pipe"]
+              })
+              return parseTestResult(output)
+            } catch (error: any) {
+              return parseTestResult(error.stdout || error.message)
+            }
+          })
         }
       }),
 
