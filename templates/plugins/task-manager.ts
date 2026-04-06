@@ -3,20 +3,12 @@ import { tool } from "@opencode-ai/plugin"
 import * as fs from "fs"
 import * as path from "path"
 
-// 导入 WorkspacePool（工作空间池）
-import { WorkspacePool, createWorkspacePool } from "./workspace-manager"
-
 /**
  * OpenCode Task Manager Plugin
- * 
+ *
  * 支持两种模式：
  * 1. 目录扫描模式：task-create
  * 2. 文件列表模式：task-create-files（MR 场景）
- * 
- * 新增功能：工作空间隔离
- * - 每个任务创建独立工作目录
- * - 支持并行执行无冲突
- * - 自动清理工作目录
  */
 
 interface TaskItem {
@@ -49,10 +41,6 @@ interface QueueState {
   currentSessionId?: string
   batchSize: number
   mode: "directory" | "filelist"
-  
-  // 工作空间池管理
-  workspacePool?: WorkspacePool
-  taskSlotMap?: Map<number, number> // task index -> slot index
 }
 
 // 按项目目录存储队列
@@ -97,89 +85,47 @@ export const TaskManagerPlugin: Plugin = async ({ client, directory }) => {
     }
   }
 
-  // 执行单个任务（支持两种模式，带工作空间池隔离）
+  // 执行单个任务（支持两种模式）
   async function executeTask(index: number): Promise<{ success: boolean; summary?: string; error?: string }> {
     let filename: string
     let fullPrompt: string
     let taskId: string
-    let testClassName: string  // 对应的测试类名
-    
+
     if (queue.mode === "filelist") {
       // 文件列表模式
       const task = queue.taskItems[index]
       filename = task.filename
       const absolutePath = path.resolve(directory, task.filename)
       taskId = `task-${index}-${path.basename(filename, path.extname(filename))}`
-      testClassName = path.basename(filename, path.extname(filename)) + "Test"
       fullPrompt = `【文件路径：${absolutePath}】\n${task.prompt}`
     } else {
       // 目录扫描模式
       filename = queue.files[index]
       const absolutePath = path.resolve(queue.dirPath, filename)
       taskId = `task-${index}-${path.basename(filename, path.extname(filename))}`
-      testClassName = path.basename(filename, path.extname(filename)) + "Test"
       const userPrompt = queue.prompt.replace(/{filename}/g, filename)
       fullPrompt = `【文件路径：${absolutePath}】\n\n${userPrompt}`
     }
-    
+
     const baseName = path.basename(filename)
     const title = baseName
-    
-    // 获取工作空间槽位（如果 batchSize > 1）
-    let slotIndex: number | null = null
-    let workspacePath: string | null = null
-    let m2Path: string | null = null
-    
-    if (queue.batchSize > 1 && queue.workspacePool) {
-      const slot = queue.workspacePool.acquireSlot(taskId)
-      if (slot) {
-        slotIndex = slot.slotIndex
-        workspacePath = slot.path
-        m2Path = slot.m2Path
-        
-        // 记录任务和槽位的映射
-        if (!queue.taskSlotMap) {
-          queue.taskSlotMap = new Map()
-        }
-        queue.taskSlotMap.set(index, slotIndex)
-        
-        // 在 prompt 中注入工作空间信息
-        fullPrompt = `[工作空间隔离模式]\n` +
-          `当前任务在独立工作目录中执行，避免与其他并行任务冲突。\n` +
-          `槽位: ${slotIndex}\n` +
-          `工作目录: ${workspacePath}\n` +
-          `Maven 仓库: ${m2Path}\n` +
-          `测试类名: ${testClassName}\n\n` +
-          `【重要】只为此任务生成和运行测试:\n` +
-          `- 测试文件名: ${testClassName}.java\n` +
-          `- 使用工具: maven-test --target ${testClassName} --level class\n` +
-          `- 编译: maven-compile\n` +
-          `${fullPrompt}`
-      } else {
-        // console.error(`[TaskManager] 无法获取工作空间槽位，任务 ${taskId} 将在默认空间执行`)
-      }
-    }
-    
+
     const session = await client.session.create({
       body: { title }
     })
     if (!session.data) {
-      // 释放槽位（如果获取失败）
-      if (queue.batchSize > 1 && queue.workspacePool && slotIndex !== null) {
-        queue.workspacePool.releaseSlot(slotIndex)
-      }
       return { success: false, error: "创建 Session 失败" }
     }
-    
+
     const sessionId = session.data.id
     queue.currentSessionId = sessionId
-    
+
     queue.results.push({
       filename,
       sessionId,
       status: "running",
     })
-    
+
     try {
       await client.session.prompt({
         path: { id: sessionId },
@@ -187,28 +133,10 @@ export const TaskManagerPlugin: Plugin = async ({ client, directory }) => {
           parts: [{ type: "text", text: fullPrompt }],
         },
       })
-      
+
       const summary = await getSessionSummary(sessionId)
-      
-      // 任务成功完成后，复制测试文件到原项目（在释放槽位之前）
-      if (queue.batchSize > 1 && queue.workspacePool && slotIndex !== null) {
-        const copied = queue.workspacePool.copyTestFiles(slotIndex, directory)
-        if (!copied) {
-          console.error(`[TaskManager] 复制测试文件失败: 槽位 ${slotIndex}`)
-        }
-      }
-      
-      // 任务完成后释放槽位（复用，不删除）
-      if (queue.batchSize > 1 && queue.workspacePool && slotIndex !== null) {
-        queue.workspacePool.releaseSlot(slotIndex)
-      }
-      
       return { success: true, summary }
     } catch (e) {
-      // 任务失败后也释放槽位（不复制测试文件）
-      if (queue.batchSize > 1 && queue.workspacePool && slotIndex !== null) {
-        queue.workspacePool.releaseSlot(slotIndex)
-      }
       return { success: false, error: String(e) }
     }
   }
@@ -274,13 +202,6 @@ export const TaskManagerPlugin: Plugin = async ({ client, directory }) => {
     function finishAll() {
       queue.running = false
       queue.currentSessionId = undefined
-      
-      // 销毁工作空间池
-      if (queue.workspacePool) {
-        queue.workspacePool.destroy()
-        queue.workspacePool = undefined
-        queue.taskSlotMap = undefined
-      }
     }
     
     // 开始调度
@@ -412,27 +333,13 @@ export const TaskManagerPlugin: Plugin = async ({ client, directory }) => {
         args: {},
         async execute() {
           const totalTasks = queue.mode === "filelist" ? queue.taskItems.length : queue.files.length
-          
+
           if (totalTasks === 0) {
             return "❌ 队列为空，请先运行 task-create 或 task-create-files"
           }
 
           if (queue.running) {
             return `❌ 队列正在执行中\n当前: ${queue.currentIndex}/${totalTasks}`
-          }
-
-          // 如果 batchSize > 1，初始化工作空间池
-          if (queue.batchSize > 1) {
-            if (!queue.workspacePool) {
-              queue.workspacePool = createWorkspacePool(directory, queue.batchSize)
-            }
-            // 初始化池子
-            const initialized = await queue.workspacePool.initialize()
-            if (!initialized) {
-              return "❌ 工作空间池初始化失败"
-            }
-            // 初始化任务-槽位映射
-            queue.taskSlotMap = new Map()
           }
 
           queue.running = true
@@ -442,7 +349,7 @@ export const TaskManagerPlugin: Plugin = async ({ client, directory }) => {
           await client.tui.openSessions()
           executeAllTasks()
 
-          return `✅ 队列已启动\n\n总任务: ${totalTasks}\n模式: ${queue.mode === "filelist" ? "文件列表" : "目录扫描"}\n并行数: ${queue.batchSize}\n${queue.batchSize > 1 ? "工作空间池: 已启用\n" : ""}\n📌 任务会自动执行\n📌 运行 task-status 查看进度`
+          return `✅ 队列已启动\n\n总任务: ${totalTasks}\n模式: ${queue.mode === "filelist" ? "文件列表" : "目录扫描"}\n并行数: ${queue.batchSize}\n📌 任务会自动执行\n📌 运行 task-status 查看进度`
         },
       }),
 
@@ -487,14 +394,7 @@ export const TaskManagerPlugin: Plugin = async ({ client, directory }) => {
         async execute() {
           queue.running = false
           const totalTasks = queue.mode === "filelist" ? queue.taskItems.length : queue.files.length
-          
-          // 销毁工作空间池（删除所有槽位）
-          if (queue.workspacePool) {
-            queue.workspacePool.destroy()
-            queue.workspacePool = undefined
-            queue.taskSlotMap = undefined
-          }
-          
+
           return `⏸️ 队列已停止\n\n已完成: ${queue.currentIndex}/${totalTasks}`
         },
       }),
