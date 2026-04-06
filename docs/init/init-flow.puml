@@ -1,0 +1,94 @@
+@startuml
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam componentStyle rectangle
+
+start
+
+:dtagent init;
+
+:解析参数
+--m2-repo
+--decompile
+--force
+--file;
+
+if (--force?) then (是)
+  :覆盖已有配置;
+else (否)
+  :检查是否已初始化;
+  if (已初始化?) then (是)
+    :退出;
+    stop
+  endif
+endif
+
+:检测项目框架;
+if (检测类型) then (MAVEN)
+else (GRADLE)
+else (未知)
+  :退出错误;
+  stop
+endif
+
+:安装组件;
+note right
+  创建.opencode目录结构
+  - agents/
+  - commands/
+  - plugins/
+  - skills/
+end note
+
+:复制templates文件;
+
+:提取Mock经验;
+note right
+  扫描src/test/java
+  解析@Mock/when模式
+end note
+
+if (--decompile?) then (是)
+  :反编译二方件;
+  note right
+    扫描Maven仓库
+    CFR反编译jar
+    生成索引
+  end note
+else (否)
+endif
+
+:生成DT_AGENTS.md;
+
+partition "生成.dtagent/config.json" {
+  :提取Maven配置;
+  
+  fork
+    :从IDEA读取
+    workspace.xml
+    ----
+    localRepository
+    userSettingsFile
+    myProfiles
+    myVmOptions;
+  fork again
+    :从命令行
+    --m2-repo;
+  fork again
+    :默认值
+    timeout: 300000;
+  end fork
+  
+  :合并配置优先级
+  IDEA > 参数 > 默认值;
+  
+  :写入config.json;
+}
+
+:生成opencode.json;
+:添加到.gitignore;
+
+:✅ 初始化完成;
+
+stop
+@enduml
