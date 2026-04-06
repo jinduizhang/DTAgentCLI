@@ -1,0 +1,42 @@
+@startuml
+title 并发模型
+
+!define RECTANGLE class
+
+RECTANGLE "并发 Session 池" as pool {
+  [Session 1 : 思考中]
+  [Session 2 : 思考中]
+  [Session 3 : 思考中]
+  [Session 4 : 思考中]
+}
+
+RECTANGLE "锁队列" as queue {
+  [Request 1 : 持有锁]
+  [Request 2 : 等待]
+  [Request 3 : 等待]
+  [Request 4 : 等待]
+}
+
+RECTANGLE "串行执行" as exec {
+  [mvn test : 执行中]
+}
+
+pool -right-> queue : 请求锁
+queue -right-> exec : 获取锁
+
+note top of pool
+  batchSize = 4
+  4 个 Session 并发思考
+end note
+
+note bottom of queue
+  async-lock 自动管理
+  Promise-based 队列
+end note
+
+note bottom of exec
+  同一时刻只有 1 个 mvn test 运行
+  target/ 无冲突
+end note
+
+@enduml

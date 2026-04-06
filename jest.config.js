@@ -7,6 +7,8 @@ const config = {
   testMatch: [
     '**/__tests__/**/*.test.ts',
     '**/__tests__/**/*.test.js',
+    '**/tests/**/*.test.ts',
+    '**/tests/**/*.test.js',
   ],
   
   // 覆盖率收集

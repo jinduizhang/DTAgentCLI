@@ -1,0 +1,35 @@
+@startuml
+title 数据流
+
+start
+:用户输入;
+:task-create\n创建队列;
+:task-start\n启动并发;
+:executeAllTasks\n调度循环;
+
+repeat
+  :scheduleNext\n控制并发度;
+  :executeTask\n创建 Session;
+  :Agent 思考\n生成测试代码\n调用 maven-test;
+  :mavenLock.acquire\n获取全局锁;
+  
+  note right
+    如果锁被占用
+    自动进入等待队列
+  end note
+  
+  :mvn test\n串行执行;
+  :mavenLock.release\n释放锁;
+  :任务完成;
+  
+  note right
+    while (runningCount < batchSize) {
+      startNextTask()
+    }
+  end note
+  
+repeat while (还有任务?) is (是) not (否)
+
+stop
+
+@enduml

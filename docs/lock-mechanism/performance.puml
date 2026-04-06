@@ -1,0 +1,39 @@
+@startuml
+title 性能特点 - 并行 vs 串行
+
+skinparam componentStyle rectangle
+
+package "并行阶段 (思考)" as parallel <<思考>> {
+  [Agent 1\n思考] as agent1
+  [Agent 2\n思考] as agent2
+  [Agent 3\n思考] as agent3
+  [Agent 4\n思考] as agent4
+}
+
+package "串行阶段 (测试)" as serial <<测试>> {
+  [mvn test 1] as test1
+  [mvn test 2] as test2
+  [mvn test 3] as test3
+  [mvn test 4] as test4
+}
+
+agent1 -down-> test1
+agent2 -down-> test2
+agent3 -down-> test3
+agent4 -down-> test4
+
+test1 -right-> test2 #dashed : 锁互斥
+test2 -right-> test3 #dashed : 锁互斥
+test3 -right-> test4 #dashed : 锁互斥
+
+note left of parallel
+  思考阶段：并行
+  充分利用 Agent 并发能力
+end note
+
+note right of serial
+  测试阶段：串行
+  避免 target/ 冲突
+end note
+
+@enduml

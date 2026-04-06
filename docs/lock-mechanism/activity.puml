@@ -1,0 +1,32 @@
+@startuml
+title 运行时行为 - 活动图
+
+|Session 1|
+start
+:思考并生成测试代码;
+
+|async-lock|
+:acquire("mvn-test");
+
+if (锁可用?) then (是)
+  :获取锁;
+else (否)
+  :进入等待队列;
+  note right: 自动排队
+  :等待锁释放;
+  :获取锁;
+endif
+
+|maven-test|
+:mvn test UserServiceTest;
+:编译 + 运行测试;
+
+|async-lock|
+:release 锁;
+note right: 触发下一个等待者
+
+|Session 1|
+:任务完成;
+stop
+
+@enduml

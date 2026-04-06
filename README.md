@@ -15,6 +15,7 @@
 - 🔧 **二方件精准 Mock** - 使用 CFR 反编译获取 API 签名，生成精准 Mock
 - 📊 **批量处理** - 支持目录扫描，批量生成测试
 - 🔄 **MR 支持** - 基于 Git Diff 分析变更代码
+- 🔒 **并发安全** - 使用 async-lock 实现 Maven 测试互斥，确保编译隔离
 
 ## 快速开始
 
@@ -112,6 +113,44 @@ dtagent init --decompile com.alibaba.*,com.taobao.* --m2-repo D:/00_code/reposit
         ▼
   提取方法签名 → 生成精准 Mock
 ```
+
+## 并发安全机制
+
+### 问题背景
+
+批量测试生成时，多个 Session 并发执行 Maven 编译，会导致 target 目录和 .m2 缓存冲突。
+
+### 解决方案
+
+使用 **async-lock** 全局互斥锁，确保 Maven 测试串行执行。
+
+```
+并发模型:
+├── Session 思考：并发执行（batchSize 控制）
+├── mvn test：串行执行（async-lock 互斥）
+└── 资源共享：单一 .m2 缓存，单一工作空间
+
+关键特性:
+├── ✅ 实现简单：一行代码搞定互斥
+├── ✅ 资源高效：共享缓存，节省空间
+├── ✅ 自动恢复：进程崩溃，锁自动释放
+└── ⚠️ 测试串行：吞吐量受限于单线程
+```
+
+### batchSize 参数说明
+
+`batchSize` 控制并发 Session 数量：
+
+- `batchSize=1`: 单 Session 执行，无并发
+- `batchSize>1`: 多 Session 并发思考，但 `mvn test` 串行执行
+
+**注意**：Session 思考阶段并发，大部分时间在思考而非测试，因此并发仍能提升整体效率。
+
+### 详细文档
+
+- [锁机制架构](./docs/lock-mechanism/architecture.md)
+- [新旧对比](./docs/lock-mechanism/comparison.md)
+- [迁移指南](./docs/parallel-optimization/migration.md)
 
 ## 目录结构
 

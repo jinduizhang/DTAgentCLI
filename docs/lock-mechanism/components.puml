@@ -1,0 +1,48 @@
+@startuml
+title 组件依赖关系
+
+package "应用层" {
+  [generate-dt-dir] as cmd
+}
+
+package "调度层" {
+  [TaskManager] as tm
+  note right of tm
+    scheduleNext()
+    runningCount 控制
+    batchSize 管理
+  end note
+}
+
+package "工具层" {
+  [MavenTools] as tools
+  [async-lock] as lock
+  note right of lock
+    全局互斥锁
+    Promise-based
+    自动队列
+  end note
+}
+
+package "执行层" {
+  [mvn test] as mvn
+  database ".m2 cache" as cache
+}
+
+cmd -down-> tm
+tm -down-> tools
+tools -down-> lock
+lock -down-> mvn
+mvn -right-> cache
+
+note left of cache
+  共享依赖缓存
+  只下载一次
+end note
+
+note bottom of tm
+  不再管理槽位
+  只控制并发数
+end note
+
+@enduml

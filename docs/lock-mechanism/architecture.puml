@@ -1,0 +1,41 @@
+@startuml
+title 锁机制架构 - 整体架构
+
+package "并发层" {
+  [Session 1] as S1
+  [Session 2] as S2
+  [Session 3] as S3
+  [Session 4] as S4
+}
+
+package "调度层" {
+  [TaskManager\nscheduleNext] as TM
+}
+
+package "锁层" {
+  [async-lock\n全局互斥锁] as AL
+}
+
+package "执行层" {
+  [maven-test\n串行执行] as MT
+}
+
+S1 -down-> TM : 并发思考
+S2 -down-> TM : 并发思考
+S3 -down-> TM : 并发思考
+S4 -down-> TM : 并发思考
+
+TM -down-> AL : 调用
+AL -down-> MT : 串行执行
+
+note right of AL
+  全局互斥锁
+  保证 mvn test 串行
+end note
+
+note bottom of MT
+  在原项目目录执行
+  共享 .m2 缓存
+end note
+
+@enduml

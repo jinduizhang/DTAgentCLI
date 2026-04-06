@@ -1,0 +1,56 @@
+@startuml
+title 核心流程 - 时序图
+
+actor User as user
+participant "TaskManager" as tm
+participant "Session 1" as s1
+participant "Session 2" as s2
+participant "Session 3" as s3
+participant "async-lock" as lock
+participant "maven-test" as maven
+
+user -> tm : task-start --batch-size 4
+
+par 并发启动 4 个 Session
+  tm -> s1 : executeTask(0)
+  tm -> s2 : executeTask(1)
+  tm -> s3 : executeTask(2)
+  tm -> s4 : executeTask(3)
+end
+
+note over s1, s4 : 4 个 Session 并发思考
+
+s1 -> lock : acquire("mvn-test")
+activate lock
+lock -> maven : mvn test UserServiceTest
+maven --> lock : 完成
+lock --> s1 : release
+deactivate lock
+
+s2 -> lock : acquire("mvn-test")
+note right of s2 : 等待 Session 1 释放锁
+activate lock
+lock -> maven : mvn test OrderServiceTest
+maven --> lock : 完成
+lock --> s2 : release
+deactivate lock
+
+s3 -> lock : acquire("mvn-test")
+note right of s3 : 等待 Session 2 释放锁
+activate lock
+lock -> maven : mvn test PaymentServiceTest
+maven --> lock : 完成
+lock --> s3 : release
+deactivate lock
+
+s4 -> lock : acquire("mvn-test")
+note right of s4 : 等待 Session 3 释放锁
+activate lock
+lock -> maven : mvn test InventoryServiceTest
+maven --> lock : 完成
+lock --> s4 : release
+deactivate lock
+
+note over s1, s4 : 所有任务完成
+
+@enduml

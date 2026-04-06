@@ -1,0 +1,28 @@
+@startuml
+title 状态流转图
+
+[*] --> 思考 : Session 启动
+
+思考 --> 等待锁 : 调用 maven-test
+等待锁 --> 执行测试 : 获取锁
+执行测试 --> 释放锁 : 测试完成
+释放锁 --> 完成 : Session 结束
+
+等待锁 --> 等待锁 : 其他 Session 持有锁
+
+note right of 思考
+  多个 Session 可同时处于此状态
+  并行思考，生成测试代码
+end note
+
+note right of 执行测试
+  只有一个 Session 可处于此状态
+  串行执行 mvn test
+end note
+
+note left of 等待锁
+  async-lock 自动排队
+  先进先出 (FIFO)
+end note
+
+@enduml
