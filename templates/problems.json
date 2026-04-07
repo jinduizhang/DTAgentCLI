@@ -1,0 +1,50 @@
+{
+  "problems": {
+    "CWD-1001": {
+      "name": "BeanUtils.copyProperties 参数顺序混淆",
+      "description": "Apache BeanUtils 与 Spring BeanUtils 的参数顺序不同，容易混淆导致拷贝方向错误",
+      "testDimensions": [
+        {
+          "dimension": "拷贝方向正确性",
+          "testStrategy": "验证属性从源对象正确拷贝到目标对象",
+          "testCases": [
+            "正向拷贝：源对象有值，目标对象为空，拷贝后目标对象应包含源的属性",
+            "反向拷贝：目标对象有值，源对象为空，拷贝后目标对象属性应被清空或保持不变（取决于实现）"
+          ]
+        },
+        {
+          "dimension": "空对象处理",
+          "testStrategy": "测试源对象或目标对象为空时的行为",
+          "testCases": [
+            "源对象为 null：应抛异常或合理处理",
+            "目标对象为 null：应抛异常或合理处理"
+          ]
+        },
+        {
+          "dimension": "部分属性拷贝",
+          "testStrategy": "测试仅拷贝部分属性时的情况",
+          "testCases": [
+            "源对象部分属性有值：仅拷贝有值的属性",
+            "使用 ignoreProperties：忽略指定属性"
+          ]
+        },
+        {
+          "dimension": "类型不匹配处理",
+          "testStrategy": "测试源对象和目标对象属性类型不匹配时的行为",
+          "testCases": [
+            "类型不匹配：应抛异常或进行类型转换",
+            "类型兼容：如 String 到 Integer 的转换"
+          ]
+        },
+        {
+          "dimension": "异常处理",
+          "testStrategy": "测试拷贝过程中出现异常时的处理",
+          "testCases": [
+            "IllegalAccessException：访问权限异常",
+            "InvocationTargetException：调用目标异常"
+          ]
+        }
+      ]
+    }
+  }
+}
