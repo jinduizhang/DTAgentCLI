@@ -110,7 +110,7 @@ CWD 编号: CWD-1001
    - 分析依赖和调用
    
 3. 确认代码已修复
-   - 检查代码是否符合预期（如 BeanUtils 参数顺序正确）
+   - 检查代码是否符合问题库定义的预期
    - 如果未修复 → 提示用户先修复代码
 ```
 
@@ -138,35 +138,25 @@ CWD 编号: CWD-1001
 ```
 对于每个 testDimension:
   1. dimension → 测试方法名称
-     示例: "拷贝方向正确性" → testCopyDirectionCorrectness()
+     示例: "维度名称" → test{DimensionName}()
      
   2. testStrategy → 测试逻辑
-     示例: "验证属性从源正确拷贝到目标" → 断言目标对象属性
+     示例: "测试策略描述" → 具体的断言和验证
      
   3. testCases → 测试场景
-     示例: ["正向拷贝", "反向拷贝"] → 两个测试方法
+     示例: ["场景1", "场景2"] → 多个测试方法
 ```
 
-**生成示例**（CWD-1001 的5个维度）：
+**生成示例**（基于 problems.json 的维度）：
 ```java
+// 对于每个 testDimension，生成对应的测试方法
 @Test
-void testCopyDirectionCorrectness() {
-    // 维度: 拷贝方向正确性
-    // 测试策略: 验证属性从源对象正确拷贝到目标对象
-    UserDTO source = new UserDTO("Alice", 25);
-    UserVO target = new UserVO();
-    
-    BeanUtils.copyProperties(source, target);
-    
-    assertThat(target.getName()).isEqualTo("Alice");
-    assertThat(target.getAge()).isEqualTo(25);
+void test{DimensionName}_{TestCaseName}() {
+    // 基于 testStrategy 实现测试逻辑
+    // 基于 testCase 定义具体测试场景
+    // ...测试代码...
 }
-
-@Test
-void testNullSourceHandling() {
-    // 维度: 空对象处理
-    // 测试策略: 测试源对象为空时的行为
-    UserDTO source = null;
+```
     UserVO target = new UserVO();
     
     assertThatThrownBy(() -> {
@@ -200,29 +190,89 @@ void testNullSourceHandling() {
 
 测试防护维度是对特定问题类型进行全方位测试防护的多个维度。每个维度代表一个需要验证的场景或边界条件，确保问题修复后不会再次出现类似问题。
 
-### CWD-1001 的测试防护维度
+### 维度来源
 
-对于 BeanUtils.copyProperties 参数顺序混淆问题，定义了5个测试防护维度：
+测试防护维度**从问题库读取**，不在此 skill 中硬编码。
 
-1. **拷贝方向正确性**
-   - 目的：确保属性从源对象正确拷贝到目标对象，不反序
-   - 测试场景：正向拷贝、反向拷贝
+**读取路径**: `.opencode/problems.json`
 
-2. **空对象处理**
-   - 目的：测试源对象或目标对象为空时的行为
-   - 测试场景：源对象为 null、目标对象为 null
+**问题库结构**:
+```json
+{
+  "problems": {
+    "CWD-XXXX": {
+      "name": "问题名称",
+      "description": "问题描述",
+      "testDimensions": [
+        {
+          "dimension": "维度名称",
+          "testStrategy": "测试策略",
+          "testCases": ["场景1", "场景2"]
+        }
+      ]
+    }
+  }
+}
+```
 
-3. **部分属性拷贝**
-   - 目的：测试仅拷贝部分属性时的情况
-   - 测试场景：部分属性有值、使用 ignoreProperties
+### 维度结构说明
 
-4. **类型不匹配处理**
-   - 目的：测试源对象和目标对象属性类型不匹配时的行为
-   - 测试场景：类型不匹配、类型兼容转换
+每个 `testDimension` 包含：
 
-5. **异常处理**
-   - 目的：测试拷贝过程中出现异常时的处理
-   - 测试场景：IllegalAccessException、InvocationTargetException
+| 字段 | 说明 | 用途 |
+|------|------|------|
+| `dimension` | 维度名称 | 生成测试方法名 |
+| `testStrategy` | 测试策略 | 定义测试逻辑 |
+| `testCases` | 测试场景列表 | 生成具体测试用例 |
+
+### 维度映射机制
+
+```
+testDimension → 测试代码
+
+1. dimension → 测试方法名
+   示例: "拷贝方向正确性" → testCopyDirectionCorrectness()
+
+2. testStrategy → 测试逻辑
+   示例: "验证属性从源正确拷贝到目标" → 断言目标对象属性
+
+3. testCases → 测试场景
+   示例: ["正向拷贝", "反向拷贝"] → 两个测试方法
+```
+
+### 示例：从 problems.json 读取维度
+
+**问题库定义** (`.opencode/problems.json`):
+```json
+{
+  "problems": {
+    "CWD-1001": {
+      "testDimensions": [
+        {
+          "dimension": "拷贝方向正确性",
+          "testStrategy": "验证属性从源正确拷贝到目标",
+          "testCases": ["正向拷贝", "反向拷贝"]
+        }
+      ]
+    }
+  }
+}
+```
+
+**生成的测试**:
+```java
+@Test
+void testCopyDirectionCorrectness_forward() {
+    // 基于 testCase: "正向拷贝"
+    // 应用 testStrategy: "验证属性从源正确拷贝到目标"
+}
+
+@Test
+void testCopyDirectionCorrectness_backward() {
+    // 基于 testCase: "反向拷贝"
+    // 应用 testStrategy: "验证属性从源正确拷贝到目标"
+}
+```
 
 ---
 
@@ -263,9 +313,9 @@ CWD-XXXX
 
 ## 使用示例
 
-### 示例 1: CWD-1001 (BeanUtils 参数顺序防护)
+### 示例：为已修复代码生成防护测试
 
-**场景**: UserConverter#convertToVO 方法已修复 BeanUtils 参数顺序，需要生成防护测试
+**场景**: 某方法已修复，需要生成防护测试防止问题再次出现
 
 **输入**:
 ```
@@ -277,34 +327,38 @@ CWD 编号: CWD-1001
 ```
 1. 读取 .opencode/problems.json → 找到 CWD-1001 定义
 2. 定位 UserConverter#convertToVO 方法
-3. 确认代码已修复（BeanUtils 参数顺序正确）
-4. 基于5个测试维度生成防护测试（调用 generate-java-ut）
-5. 运行 mvn test 验证（调用 fix-java-ut）
-6. 所有测试通过 → 防护测试生成成功
+3. 确认代码已修复
+4. 从 CWD-1001 的 testDimensions 读取测试防护维度
+5. 基于每个维度生成对应的测试方法（调用 generate-java-ut）
+6. 运行 mvn test 验证（调用 fix-java-ut）
+7. 所有测试通过 → 防护测试生成成功
 ```
 
-**生成的测试**（基于5个维度）：
+**维度读取示例**:
+```json
+// 从 problems.json 读取 CWD-1001 的 testDimensions
+{
+  "dimension": "拷贝方向正确性",
+  "testStrategy": "验证属性从源正确拷贝到目标",
+  "testCases": ["正向拷贝", "反向拷贝"]
+}
+```
+
+**生成的测试**（基于维度动态生成）：
 ```java
-// 1. 拷贝方向正确性
 @Test
-void testCopyDirectionCorrectness() {
-    UserDTO source = new UserDTO("Alice", 25);
-    UserVO target = new UserVO();
-    
-    userConverter.convertToVO(source);
-    
-    // 验证属性从 source 正确拷贝到 target
+void testCopyDirectionCorrectness_forward() {
+    // 基于 testCase: "正向拷贝"
+    // 应用 testStrategy: "验证属性从源正确拷贝到目标"
+    // ...测试逻辑...
 }
 
-// 2. 空对象处理
 @Test
-void testNullSourceHandling() {
-    assertThatThrownBy(() -> {
-        userConverter.convertToVO(null);
-    }).isInstanceOf(IllegalArgumentException.class);
+void testCopyDirectionCorrectness_backward() {
+    // 基于 testCase: "反向拷贝"
+    // 应用 testStrategy: "验证属性从源正确拷贝到目标"
+    // ...测试逻辑...
 }
-
-// 3-5: 其他维度的测试...
 ```
 
 ---
