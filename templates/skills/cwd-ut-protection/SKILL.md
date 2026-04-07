@@ -1,6 +1,6 @@
 ---
 name: cwd-ut-protection
-description: 基于CWD编号的自动化UT防护，用户输入方法地址和CWD编号，系统自动修复代码并生成全方位测试防护
+description: 基于CWD编号的UT防护测试生成，用户输入方法地址和CWD编号，系统针对已修复代码生成全方位测试防护
 compatibility: opencode
 metadata:
   language: java
@@ -9,14 +9,15 @@ metadata:
 
 ## 功能
 
-为 Java 代码提供基于 CWD 编号的 UT 防护能力。
+为**已修复的代码**提供基于 CWD 编号的 UT 防护测试生成能力。
+
+**前提条件**: 代码已经修复完成，本 skill 仅生成防护测试，不修复代码。
 
 用户输入方法地址和 CWD 编号，系统自动：
 1. 查找问题库获取 CWD 问题定义
-2. 定位问题代码
-3. 自动修复代码
-4. 基于 CWD 测试防护维度生成全方位测试
-5. 运行测试验证修复
+2. 定位已修复的问题代码
+3. 基于 CWD 测试防护维度生成全方位测试
+4. 运行测试验证防护有效性
 
 ## 依赖 Skills
 
@@ -95,7 +96,7 @@ CWD 编号: CWD-1001
 4. 如果找不到 CWD 编号 → 报错并提示用户检查问题库
 ```
 
-### 4. 定位问题代码
+### 4. 定位已修复代码
 
 **定位逻辑**：
 
@@ -108,39 +109,12 @@ CWD 编号: CWD-1001
    - 提取方法体
    - 分析依赖和调用
    
-3. 检查是否存在问题库定义的问题类型
-   - 搜索特定 API 调用（如 BeanUtils.copyProperties）
-   - 分析参数顺序是否符合规范
+3. 确认代码已修复
+   - 检查代码是否符合预期（如 BeanUtils 参数顺序正确）
+   - 如果未修复 → 提示用户先修复代码
 ```
 
-### 5. AI 自动修复
-
-**基于问题定义自动修复代码**：
-
-修复流程：
-```
-1. 基于问题定义的修复策略
-   - CWD-1001: 检查并修正 BeanUtils 参数顺序
-   
-2. 应用修复代码
-   - 使用 Edit 工具修改源文件
-   - 保持代码风格一致
-   
-3. 编译验证（复用 fix-java-ut）
-   - 执行 mvn test-compile
-   - 如果失败 → 循环修复直到通过
-```
-
-**修复示例**（CWD-1001）：
-```java
-// 修复前（参数反序）
-BeanUtils.copyProperties(target, source);  // Apache 顺序（目标在前）
-
-// 修复后（如果是 Spring BeanUtils）
-BeanUtils.copyProperties(source, target);  // Spring 顺序（源在前）
-```
-
-### 6. AI 生成测试
+### 5. 生成防护测试
 
 **复用 `/generate-java-ut` 的测试生成逻辑**：
 
@@ -201,7 +175,7 @@ void testNullSourceHandling() {
 }
 ```
 
-### 7. 运行测试验证
+### 6. 运行测试验证
 
 **复用 `/fix-java-ut` 的验证逻辑**：
 
@@ -209,12 +183,12 @@ void testNullSourceHandling() {
 ```
 1. 运行 mvn test -Dtest={TestClass}（复用 fix-java-ut 步骤3）
 2. 检查测试结果
-   - 所有测试通过 → 修复成功
-   - 有测试失败 → 分析原因并调整
+   - 所有测试通过 → 防护测试生成成功
+   - 有测试失败 → 分析原因并调整测试代码
    
-3. 如果失败 → 循环修复（最多10次，复用 fix-java-ut 步骤3）
+3. 如果失败 → 循环修复测试代码（最多10次，复用 fix-java-ut 步骤3）
    - 分析失败原因
-   - 调整测试或修复代码
+   - 调整测试代码（不修改源代码）
    - 重新运行
 ```
 
@@ -289,7 +263,9 @@ CWD-XXXX
 
 ## 使用示例
 
-### 示例 1: CWD-1001 (BeanUtils 参数顺序混淆)
+### 示例 1: CWD-1001 (BeanUtils 参数顺序防护)
+
+**场景**: UserConverter#convertToVO 方法已修复 BeanUtils 参数顺序，需要生成防护测试
 
 **输入**:
 ```
@@ -301,11 +277,34 @@ CWD 编号: CWD-1001
 ```
 1. 读取 .opencode/problems.json → 找到 CWD-1001 定义
 2. 定位 UserConverter#convertToVO 方法
-3. 检查 BeanUtils.copyProperties 参数顺序
-4. 如果参数反序 → 修正为正确顺序
-5. 基于5个测试维度生成测试（调用 generate-java-ut）
-6. 运行 mvn test 验证（调用 fix-java-ut）
-7. 所有测试通过 → 修复成功
+3. 确认代码已修复（BeanUtils 参数顺序正确）
+4. 基于5个测试维度生成防护测试（调用 generate-java-ut）
+5. 运行 mvn test 验证（调用 fix-java-ut）
+6. 所有测试通过 → 防护测试生成成功
+```
+
+**生成的测试**（基于5个维度）：
+```java
+// 1. 拷贝方向正确性
+@Test
+void testCopyDirectionCorrectness() {
+    UserDTO source = new UserDTO("Alice", 25);
+    UserVO target = new UserVO();
+    
+    userConverter.convertToVO(source);
+    
+    // 验证属性从 source 正确拷贝到 target
+}
+
+// 2. 空对象处理
+@Test
+void testNullSourceHandling() {
+    assertThatThrownBy(() -> {
+        userConverter.convertToVO(null);
+    }).isInstanceOf(IllegalArgumentException.class);
+}
+
+// 3-5: 其他维度的测试...
 ```
 
 ---
@@ -314,6 +313,12 @@ CWD 编号: CWD-1001
 
 **继承 fix-java-ut 的核心保证**：
 
-- **编译必须成功** - 不影响后续任务
-- **运行最多10次** - 避免无限循环
-- **最终代码可编译** - 无论运行是否成功
+- **编译必须成功** - 生成的测试代码必须可编译
+- **运行最多10次** - 测试失败时循环修复测试代码（不修改源代码）
+- **最终代码可编译** - 无论测试是否通过，测试代码都能编译
+
+**重要约束**：
+
+- ✅ **仅生成测试代码** - 不修改源代码
+- ✅ **代码已修复前提** - 假设源代码已经正确修复
+- ✅ **防护测试目的** - 防止相同问题再次出现
