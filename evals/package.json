@@ -1,0 +1,45 @@
+{
+  "name": "dtagent-evaluator",
+  "version": "1.0.0",
+  "description": "通用 Skill 自动化测评系统 - 适用于 OpenCode Agent Skill 评估",
+  "main": "src/core/Runner.js",
+  "scripts": {
+    "eval:all": "node src/core/Runner.js --all",
+    "eval:skill": "node src/core/Runner.js --skill",
+    "eval:case": "node src/core/Runner.js --case",
+    "eval:compare": "node src/core/Runner.js --compare",
+    "eval:ci": "node src/core/Runner.js --ci",
+    "eval:report": "node src/core/ReportGenerator.js",
+    "test": "jest",
+    "lint": "eslint src/"
+  },
+  "keywords": [
+    "opencode",
+    "skill",
+    "evaluation",
+    "testing",
+    "benchmark",
+    "dtagent"
+  ],
+  "author": "Your Company",
+  "license": "MIT",
+  "dependencies": {
+    "yaml": "^2.3.4",
+    "chalk": "^4.1.2",
+    "ora": "^5.4.1",
+    "commander": "^11.1.0",
+    "glob": "^10.3.10",
+    "fs-extra": "^11.1.1",
+    "simple-git": "^3.20.0",
+    "table": "^6.8.1",
+    "cli-progress": "^3.12.0",
+    "xml2js": "^0.6.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "eslint": "^8.54.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

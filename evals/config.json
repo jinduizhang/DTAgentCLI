@@ -1,0 +1,35 @@
+{
+  "parallelism": 2,
+  "timeout": {
+    "default": 180000,
+    "init-dt": 60000,
+    "generate-java-ut": 300000,
+    "fix-java-ut": 300000,
+    "java-coverage": 300000,
+    "cwd-ut-protection": 300000
+  },
+  "thresholds": {
+    "overall": 80,
+    "init-dt": 85,
+    "generate-java-ut": 90,
+    "fix-java-ut": 85,
+    "java-coverage": 80,
+    "cwd-ut-protection": 75
+  },
+  "metricWeights": {
+    "passRate": 0.4,
+    "performance": 0.3,
+    "stability": 0.3
+  },
+  "output": {
+    "directory": "./reports",
+    "formats": ["html", "json", "markdown"]
+  },
+  "comparison": {
+    "enabled": true,
+    "baselinePath": "./fixtures/expected-results"
+  },
+  "logLevel": "info",
+  "workspaceDir": "./workspaces",
+  "cleanup": true
+}

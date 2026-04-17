@@ -1,0 +1,32 @@
+id: TC-GEN-001
+name: UserService 测试生成
+skill: generate-java-ut
+priority: P0
+description: 测试为 UserService 生成单元测试
+
+target:
+  type: file
+  path: src/main/java/com/example/service/UserService.java
+
+prerequisites:
+  - type: init-dt
+    args: []
+
+expected:
+  files:
+    - path: src/test/java/com/example/service/UserServiceTest.java
+      exists: true
+      minLines: 100
+      mustContain:
+        - "@Test"
+        - "@Mock"
+        - "@InjectMocks"
+  compilation:
+    shouldCompile: true
+  execution:
+    shouldPass: true
+    minTests: 5
+  coverage:
+    minLineCoverage: 0.75
+
+timeout: 180000

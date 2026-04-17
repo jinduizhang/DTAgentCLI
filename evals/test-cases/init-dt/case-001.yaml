@@ -1,0 +1,24 @@
+id: TC-INIT-001
+name: Maven 项目初始化测试
+skill: init-dt
+priority: P0
+description: 测试 init-dt skill 能否正确初始化 Maven 项目
+
+target:
+  type: project
+  path: ./test-projects/demo-service
+
+expected:
+  files:
+    - path: DT_AGENTS.md
+      exists: true
+      mustContain:
+        - "MAVEN"
+        - "test-compile"
+    - path: opencode.json
+      exists: true
+  execution:
+    shouldComplete: true
+    maxTime: 30000
+
+timeout: 60000
