@@ -17,6 +17,7 @@ program
   .option('-f, --force', '强制覆盖已有配置')
   .option('--decompile <packages>', '反编译二方件，多个包用逗号分隔（如 com.alibaba.*,com.taobao.*）')
   .option('--m2-repo <path>', 'Maven 本地仓库路径')
+  .option('--opencode', '初始化完成后自动启动 opencode')
   .action(async (file, options) => {
     const { initCommand } = require('../dist/commands/init');
     // 解析 decompile 参数

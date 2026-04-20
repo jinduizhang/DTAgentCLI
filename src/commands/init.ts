@@ -10,6 +10,7 @@ import { execSync } from 'child_process';
 import { detectFramework, formatFrameworkInfo, FrameworkInfo } from '../utils/detector';
 import { parsePomDependencies, identifyInternalDeps, scanLocalMavenRepo, setMavenConfig } from '../utils/dependency';
 import { decompileJars, generateIndex, saveIndex } from '../utils/cfr';
+import { launchOpencode } from '../utils/opencode-launcher';
 
 export interface InitOptions {
   dryRun?: boolean;
@@ -17,6 +18,7 @@ export interface InitOptions {
   file?: string;  // 可选：指定 pom.xml 或 build.gradle 文件路径
   decompilePackages?: string[]; // 可选：指定需要反编译的包范围（如 ['com.alibaba.*']）
   m2Repo?: string; // 可选：Maven 本地仓库路径
+  opencode?: boolean; // 可选：初始化完成后启动 opencode
 }
 
 interface MockExperience {
@@ -95,16 +97,27 @@ export async function initCommand(options: InitOptions): Promise<void> {
 
     spinner.succeed('DTAgent 初始化完成！');
     
-    console.log(chalk.green('\n✅ 下一步操作:'));
-    console.log(chalk.gray('   1. 运行 OpenCode（自动使用 DTAgent）'));
-    console.log(chalk.gray('   2. 执行 /generate-dt-single <file> 生成测试'));
-    console.log(chalk.gray('   3. 在 .opencode/skills/generate-java-ut/experiences/ 添加经验'));
-    console.log(chalk.gray('\n📁 经验库位置:'));
-    console.log(chalk.gray('   .opencode/skills/generate-java-ut/experiences/'));
-    console.log(chalk.gray('   ├── README.md      # 使用说明'));
-    console.log(chalk.gray('   ├── template.md    # 经验模板'));
-    console.log(chalk.gray('   └── your-*.md      # 你的自定义经验'));
-    console.log(chalk.gray('\n⚙️  默认代理: dtagent（已配置在 opencode.json）\n'));
+    // Step 5: Launch opencode if --opencode flag is set
+    if (options.opencode && !options.dryRun) {
+      console.log(chalk.blue('\n🚀 正在启动 opencode...'));
+      try {
+        await launchOpencode(projectDir);
+      } catch (error) {
+        console.log(chalk.yellow('\n⚠️  无法启动 opencode，请手动运行:'));
+        console.log(chalk.gray('   opencode\n'));
+      }
+    } else {
+      console.log(chalk.green('\n✅ 下一步操作:'));
+      console.log(chalk.gray('   1. 运行 OpenCode（自动使用 DTAgent）'));
+      console.log(chalk.gray('   2. 执行 /generate-dt-single <file> 生成测试'));
+      console.log(chalk.gray('   3. 在 .opencode/skills/generate-java-ut/experiences/ 添加经验'));
+      console.log(chalk.gray('\n📁 经验库位置:'));
+      console.log(chalk.gray('   .opencode/skills/generate-java-ut/experiences/'));
+      console.log(chalk.gray('   ├── README.md      # 使用说明'));
+      console.log(chalk.gray('   ├── template.md    # 经验模板'));
+      console.log(chalk.gray('   └── your-*.md      # 你的自定义经验'));
+      console.log(chalk.gray('\n⚙️  默认代理: dtagent（已配置在 opencode.json）\n'));
+    }
 
   } catch (error) {
     spinner.fail('初始化失败');
@@ -545,10 +558,11 @@ void methodName_scenario_expectedResult() {
  * Maven 配置信息
  */
 interface MavenConfig {
-  settings?: string;
-  profiles?: string;
-  jvmArgs?: string;
-  source?: string;
+  repoPath?: string;    // Maven 本地仓库路径
+  settings?: string;    // Maven settings.xml 路径
+  profiles?: string;    // 激活的 profiles
+  jvmArgs?: string;     // JVM 参数
+  source?: string;      // 配置来源
 }
 
 /**
@@ -564,25 +578,31 @@ function extractMavenConfig(projectDir: string): MavenConfig {
     try {
       const content = fs.readFileSync(workspacePath, 'utf-8');
       
+      // 提取本地仓库路径 (localRepository)
+      const repoMatch = content.match(/localRepository[^>]*value="([^"]+)"/);
+      if (repoMatch) {
+        config.repoPath = repoMatch[1];
+      }
+      
       // 提取 settings 文件路径
-      const settingsMatch = content.match(/myUserSettingsFile[^>]*value="([^"]+)"/);
+      const settingsMatch = content.match(/userSettingsFile[^>]*value="([^"]+)"/);
       if (settingsMatch) {
         config.settings = settingsMatch[1];
       }
       
-      // 提取 profiles
+      // 提取 profiles (如果有)
       const profilesMatch = content.match(/myProfiles[^>]*value="([^"]+)"/);
       if (profilesMatch) {
         config.profiles = profilesMatch[1];
       }
       
-      // 提取 JVM 参数
+      // 提取 JVM 参数 (如果有)
       const jvmMatch = content.match(/myVmOptions[^>]*value="([^"]+)"/);
       if (jvmMatch) {
         config.jvmArgs = jvmMatch[1];
       }
       
-      if (config.settings || config.profiles || config.jvmArgs) {
+      if (config.repoPath || config.settings || config.profiles || config.jvmArgs) {
         config.source = '.idea/workspace.xml';
       }
     } catch (e) {
@@ -617,10 +637,10 @@ function generateDtagentConfig(projectDir: string, mavenConfig: MavenConfig): vo
     // 忽略读取失败
   }
   
-  // 构建配置对象
+  // 构建配置对象（优先级：IDEA配置 > 命令行参数 > 默认值）
   const config = {
     maven: {
-      repoPath: savedM2Repo || "",
+      repoPath: mavenConfig.repoPath || savedM2Repo || "",
       settings: mavenConfig.settings || "",
       profiles: mavenConfig.profiles || "",
       jvmArgs: mavenConfig.jvmArgs || "",
