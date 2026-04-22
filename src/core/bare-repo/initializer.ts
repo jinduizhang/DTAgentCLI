@@ -46,6 +46,11 @@ export class BareRepoInitializer {
    * 验证是否可转换为 Bare Repo
    */
   validate(): ValidationResult {
+    // 如果已是 Bare Repo，直接返回有效
+    if (this.isBareRepo()) {
+      return { valid: true };
+    }
+
     // 检查是否是 Git 仓库
     const gitDir = path.join(this.projectRoot, '.git');
     if (!fs.existsSync(gitDir)) {

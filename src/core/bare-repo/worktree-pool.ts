@@ -73,9 +73,18 @@ export class WorktreePool {
         fs.symlinkSync(relativeSrcPath, path.join(worktreePath, 'src'), 'dir');
       }
 
-      // pom.xml 软链接
+      // pom.xml 软链接（Windows 使用硬链接或复制）
       const relativePomPath = path.relative(worktreePath, path.join(mainPath, 'pom.xml'));
-      fs.symlinkSync(relativePomPath, path.join(worktreePath, 'pom.xml'), 'file');
+      const pomDestPath = path.join(worktreePath, 'pom.xml');
+      const pomSrcPath = path.join(mainPath, 'pom.xml');
+      
+      try {
+        // 尝试硬链接（Windows 不需要特殊权限）
+        fs.linkSync(pomSrcPath, pomDestPath);
+      } catch (linkError) {
+        // 如果硬链接失败（如跨文件系统），使用复制
+        fs.copyFileSync(pomSrcPath, pomDestPath);
+      }
 
       // 6. 创建独立的 target 目录
       fs.mkdirSync(path.join(worktreePath, 'target'), { recursive: true });
