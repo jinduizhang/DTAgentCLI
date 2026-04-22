@@ -7,11 +7,19 @@
 ```
 docs/parallel-optimization/
 ├── README.md              # 本文件
-├── architecture.md        # 方案架构文档
+├── architecture.md        # 方案架构文档（待更新）
 ├── changes.md             # 变更记录
-├── migration.md           # 迁移指南（新增）
+├── migration.md           # 迁移指南
 └── process.md             # 优化过程记录
 ```
+
+## 方案演进历史
+
+| 方案 | 状态 | 说明 |
+|------|------|------|
+| WorkspacePool | 已废弃 | 槽位隔离，复杂度高 |
+| async-lock | 向后兼容 | 锁机制，用于 batchSize=1 |
+| **Bare Repo Worktree** | **当前方案** | Git Worktree 文件隔离，完全并行 |
 
 ## 文档说明
 
@@ -22,41 +30,35 @@ docs/parallel-optimization/
 **包含**:
 - 问题背景与解决方案
 - ~~工作空间池设计~~（已废弃）
-- **锁机制设计**（当前方案）
+- ~~锁机制设计~~（向后兼容）
+- **Bare Repo Worktree 设计**（当前方案）
 - 核心组件设计
 - 并行执行流程
 - 关键决策说明
-- **迁移指南**
 
 **适用对象**: 开发人员、架构师
 
 ---
 
-### 📝 [变更记录](./changes.md)
+### 📝 [设计文档](../superpowers/specs/2025-04-22-bare-repo-worktree-design.md)
 
-**内容**: 详细的代码变更清单
+**内容**: Bare Repo Worktree 模式完整设计
 
 **包含**:
-- 新增文件说明
-- 修改文件对比
-- 兼容性分析
-- 回滚方案
-- 测试验证结果
+- 整体架构设计
+- 目录结构设计
+- 组件架构设计
+- 数据流设计
+- 状态机设计
+- 错误处理设计
 
-**适用对象**: 开发人员、测试人员
+**适用对象**: 开发人员、架构师
 
 ---
 
-### 🔄 [迁移指南](./migration.md)（新增）
+### 🔄 [迁移指南](./migration.md)
 
-**内容**: 从 WorkspacePool 迁移到 async-lock 的完整指南
-
-**包含**:
-- 迁移步骤
-- Breaking changes
-- 代码变更对比
-- 配置调整
-- 检查清单
+**内容**: 从 WorkspacePool 迁移到 async-lock 的指南（历史）
 
 **适用对象**: 开发人员、运维人员
 
@@ -81,156 +83,103 @@ docs/parallel-optimization/
 
 ## 快速开始
 
-### 方案概述
+### 当前方案：Bare Repo Worktree 模式
 
-> **当前方案**：采用 **async-lock 锁机制** 实现 Maven 编译互斥
+> **核心机制**：Git Bare Repository + 动态 Worktree 实现真正的文件系统隔离
 
-**架构演进**：
+**架构**：
 
-| 方案 | 状态 | 说明 |
+```
+project/
+├── .bare/              # Bare 仓库（原 .git 转换）
+├── .git → .bare        # gitdir 指向文件
+├── main/               # 主 Worktree（原项目代码）
+└── .dtagent/worktrees/ # 动态 Worktree（并行执行时创建）
+    ├── group-0-{ts}/   # 组 0 Worktree
+    │   ├── .m2/        # 独立 Maven 仓库
+    │   ├── src/        # 软链接 → main/src
+    │   └── pom.xml     # 软链接 → main/pom.xml
+    ├── group-1-{ts}/
+    └── group-2-{ts}/
+```
+
+**执行流程**：
+
+1. 初始化 Bare Repo（一次性）
+2. 文件分组（按 batchSize）
+3. 创建 Worktree 组
+4. 并行执行所有组（组间并发，组内串行）
+5. 合并结果
+6. 自动清理 Worktree
+
+### 核心组件
+
+| 组件 | 文件 | 职责 |
 |------|------|------|
-| WorkspacePool | 已废弃 | 槽位隔离，复杂度高 |
-| async-lock | **当前方案** | 锁机制，简单可靠 |
-
-**核心机制**：
-
-```
-并发模型:
-├── Session 思考：并发执行（batchSize 控制）
-├── mvn test：串行执行（async-lock 互斥）
-└── 资源共享：单一 .m2 缓存，单一工作空间
-
-关键特性:
-├── ✅ 实现简单：一行代码搞定互斥
-├── ✅ 资源高效：共享缓存，节省空间
-├── ✅ 自动恢复：进程崩溃，锁自动释放
-├── ✅ 无上限：理论支持无限并发请求排队
-└── ⚠️ 测试串行：吞吐量受限于单线程
-```
-
-**对比旧方案（WorkspacePool）**：
-
-```
-旧方案（已废弃）:
-.dtagent/workspace-pool/          # 工作空间池（batchSize 个槽位）
-├── slot-0/                       # 槽位 0（复用）
-├── slot-1/                       # 槽位 1
-├── slot-2/                       # 槽位 2
-└── slot-3/                       # 槽位 3
-
-问题:
-- 槽位数量限制并发度
-- 空闲槽位占磁盘空间
-- 槽位泄漏风险
-- 实现复杂度高
-
-新方案（async-lock）:
-├── mavenLock.acquire('maven')    # 全局互斥锁
-├── 共享 .m2 缓存                  # 节省 67% 空间
-└── 共享工作空间                   # 无需多份拷贝
-
-优势:
-- 实现简单
-- 自动恢复
-- 资源高效
-```
-
-**详细文档**：
-- [锁机制架构](../lock-mechanism/architecture.md)
-- [新旧对比](../lock-mechanism/comparison.md)
-- [迁移指南](./migration.md)
-
----
-
-### 核心变更
-
-**新增（当前方案）**：
-- `async-lock` 依赖 - 全局互斥锁库
-
-**删除（旧方案）**：
-- `src/core/workspace-manager.ts` - WorkspacePool 已删除
-
-**修改**：
-- `templates/plugins/task-manager.ts` - 集成锁机制
-- `src/tools/maven-test.ts` - 内部加锁实现互斥
+| BareRepoInitializer | `initializer.ts` | 一次性仓库转换 |
+| FileGrouper | `file-grouper.ts` | 智能文件分组 |
+| WorktreePool | `worktree-pool.ts` | Worktree 生命周期管理 |
+| GroupExecutor | `group-executor.ts` | 组内串行执行 |
+| ResultMerger | `result-merger.ts` | 结果合并与报告 |
+| BareRepoOrchestrator | `orchestrator.ts` | 并行调度中心 |
 
 ### 使用方法
 
-> **注意**：`batchSize` 参数仍然有效，控制并发 Session 数量。但 Maven 测试通过锁机制串行执行。
-
 ```bash
-# 串行执行（batchSize=1）
-/task-create dir=src/main/java ext=java batchSize=1 prompt="..."
-
-# 并行执行（batchSize=4，Session 并发，mvn test 串行）
+# 自动启用：batchSize > 1 且 files.length > batchSize
 /task-create dir=src/main/java ext=java batchSize=4 prompt="..."
 
-# 或使用简写命令
+# 分组策略选择
+/task-create dir=src/main/java ext=java batchSize=4 groupingStrategy=by-package prompt="..."
+
+# 简写命令
 /generate-dt-dir src/main/java/service --batch-size 4
 /mr-ut --base main --batch-size 4
 /diff-ut --base main --batch-size 4
-/fix-ut src/test/java/service --batch-size 4
 ```
 
-**行为说明**：
-- `batchSize=1`: 单 Session 执行，无并发
-- `batchSize>1`: 多 Session 并发思考，但 `mvn test` 串行执行（通过锁互斥）
-- **无需槽位路径**：测试文件直接写入原项目目录
+**分组策略**：
 
-## 验证报告
+| 策略 | 说明 | 适用场景 |
+|------|------|---------|
+| round-robin | 简单轮询，均匀分配 | 通用 |
+| by-package | 按包路径分组，同包同组 | 减少 Session 上下文切换 |
+| by-complexity | 按文件复杂度均衡 | 大文件小文件混合 |
 
-**原型验证**: 通过 ✅
+### 与旧方案对比
 
-- [x] 软链接创建
-- [x] 独立 .m2 编译
-- [x] 并行编译隔离
-- [x] 性能对比（1.19x 加速）
+| 特性 | async-lock（旧） | Bare Repo（新） |
+|------|----------------|----------------|
+| **并发度** | Session 并发，Maven 串行 | 完全并行（包括 Maven） |
+| **隔离级别** | 时间（锁） | 空间（Worktree） |
+| **失败隔离** | 无（单点失败影响全部） | 完全隔离（组独立） |
+| **磁盘占用** | 低（共享 .m2） | 中（各组独立 .m2） |
+| **恢复能力** | 锁自动释放 | Worktree 可独立恢复 |
+| **Git 集成** | 无 | 原生支持 |
 
-**测试报告**: `.sisyphus/evidence/prototype-verification-report.md`
+---
 
-## 性能提升
+## 验证清单
 
-| 执行方式 | 时间 | 加速比 | 说明 |
-|----------|------|--------|------|
-| 串行 | ~60s | 1x | batchSize=1 |
-| 并行 (4任务) | ~50s | 1.19x | batchSize=4，首次有依赖下载 |
-| 并行 (后续) | ~30s | 2x | 槽位复用，依赖已缓存 |
+- [x] Bare Repo 初始化成功
+- [x] Worktree 创建成功
+- [x] 文件分组正确
+- [x] 组间并行执行
+- [x] 组内串行执行
+- [x] Maven 编译在独立 .m2 中无冲突
+- [x] 测试文件自动复制到 main/src/test/
+- [x] Worktree 清理成功
+- [ ] 性能基准测试
 
-*注：首次运行有依赖下载开销，槽位复用后显著加速*
-
-## 关键决策
-
-| 决策 | 选择 | 理由 |
-|------|------|------|
-| 隔离方案 | async-lock（锁机制） | 实现简单，故障自愈，资源高效 |
-| 并发模型 | Session 并发 + mvn test 串行 | 思考并发提升效率，测试串行保证隔离 |
-| batchSize | 控制并发 Session 数量 | 与用户预期一致 |
-| 资源管理 | 共享 .m2 缓存 | 节省空间，提高缓存命中率 |
-| 锁粒度 | 全局锁 | 实现简单，满足当前需求 |
-
-> **废弃决策**：
-> - ~~隔离方案：WorkspacePool（槽位隔离）~~ → 已改为锁机制
-> - ~~槽位数量：batchSize~~ → batchSize 现控制并发 Session 数
-> - ~~复用策略：清空 test/target~~ → 无需槽位复用
-> - ~~清理时机：队列结束~~ → 无需清理槽位
+---
 
 ## 兼容性
 
-✅ **向后兼容**: batchSize 参数行为一致（控制并发 Session 数）
+✅ **向后兼容**: batchSize=1 或 files.length <= batchSize 时，使用 async-lock 模式
 
-✅ **向前改进**: 无需 Agent 支持 `-Dmaven.repo.local` 参数（使用共享 .m2）
+✅ **自动切换**: 无需配置，系统自动判断使用哪种模式
 
-⚠️ **行为变更**: Maven 测试串行执行（通过锁互斥），而非槽位隔离并行
-
-## 迁移说明
-
-从 WorkspacePool 迁移到 async-lock 的详细步骤，请参阅 [迁移指南](./migration.md)。
-
-**关键变更**：
-- WorkspacePool 类已删除
-- `src/tools/maven-test.ts` 内部加锁
-- Prompt 中无需注入槽位路径
-- 测试文件直接写入原项目目录
+---
 
 ## 贡献者
 
@@ -241,29 +190,11 @@ docs/parallel-optimization/
 
 ## 时间线
 
-- **2025-03-26**: 方案讨论、原型验证、核心实现、文档整理
-- **总计**: 4 小时
-
-## 后续计划
-
-> **注意**：以下计划基于当前 async-lock 方案。
-
-### 短期
-- [x] 集成 async-lock 依赖
-- [x] 删除 WorkspacePool 代码
-- [x] 更新文档
-- [ ] 回归测试验证
-
-### 中期
-- [ ] 性能基准测试
-- [ ] 锁等待时间监控
-- [ ] Unix/Mac 兼容性测试
-
-### 长期
-- [ ] 模块级锁（提升并发度）
-- [ ] 分布式锁（支持多进程）
+- **2025-03-26**: WorkspacePool 方案讨论、验证、实现（已废弃）
+- **2025-04-06**: async-lock 方案取代 WorkspacePool
+- **2025-04-22**: Bare Repo Worktree 方案设计、实现
 
 ---
 
-**最后更新**: 2025-04-06  
-**方案状态**: async-lock（锁机制）已取代 WorkspacePool
+**最后更新**: 2025-04-22  
+**方案状态**: Bare Repo Worktree 模式已实现
