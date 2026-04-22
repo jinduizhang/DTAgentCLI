@@ -3,12 +3,16 @@ import { tool } from "@opencode-ai/plugin"
 import * as fs from "fs"
 import * as path from "path"
 
+// Bare Repo Worktree 模式（编译后的 JS 路径）
+const BARE_REPO_PATH = path.resolve(__dirname, "../../dist/core/bare-repo")
+
 /**
  * OpenCode Task Manager Plugin
  *
- * 支持两种模式：
+ * 支持三种模式：
  * 1. 目录扫描模式：task-create
  * 2. 文件列表模式：task-create-files（MR 场景）
+ * 3. Bare Repo Worktree 模式：task-bare-create（真正的并行隔离）
  */
 
 interface TaskItem {
@@ -438,6 +442,204 @@ export const TaskManagerPlugin: Plugin = async ({ client, directory }) => {
         async execute() {
           await client.tui.openSessions()
           return "✅ 已打开 Session 选择器"
+        },
+      }),
+
+      // ============ Bare Repo Worktree 模式 ============
+      
+      /**
+       * Bare Repo 模式：创建任务队列
+       * 
+       * 与普通模式不同，此模式会：
+       * 1. 检查项目是否已转换为 Bare Repo
+       * 2. 使用 Worktree 创建独立的执行环境
+       * 3. 每个 Worktree 有独立的 .m2 目录，避免 Maven 冲突
+       */
+      "task-bare-create": tool({
+        description: "创建任务队列（Bare Repo Worktree 模式）- 真正的并行隔离执行",
+        args: {
+          dir: tool.schema.string().describe("目录路径"),
+          ext: tool.schema.string().optional().default("java").describe("文件后缀"),
+          recursive: tool.schema.boolean().optional().default(false).describe("递归扫描"),
+          batchSize: tool.schema.number().optional().default(2).describe("并行组数（每个组独立 Worktree）"),
+          prompt: tool.schema.string().optional().describe("自定义任务提示词"),
+        },
+        async execute(args) {
+          const dirPath = path.isAbsolute(args.dir) 
+            ? args.dir 
+            : path.resolve(directory, args.dir)
+          
+          if (!fs.existsSync(dirPath)) {
+            return `❌ 目录不存在: ${dirPath}`
+          }
+
+          let ext = args.ext || "java"
+          if (!ext.startsWith(".")) ext = "." + ext
+          const regex = new RegExp(`\\${ext}$`)
+
+          function scanDirectory(baseDir: string, currentDir: string, regex: RegExp): string[] {
+            const results: string[] = []
+            const items = fs.readdirSync(currentDir)
+            
+            for (const item of items) {
+              const fullPath = path.join(currentDir, item)
+              const stat = fs.statSync(fullPath)
+              
+              if (stat.isDirectory()) {
+                const subFiles = scanDirectory(baseDir, fullPath, regex)
+                results.push(...subFiles)
+              } else if (stat.isFile() && regex.test(item)) {
+                const relativePath = path.relative(baseDir, fullPath)
+                results.push(relativePath)
+              }
+            }
+            return results
+          }
+
+          const files = args.recursive 
+            ? scanDirectory(dirPath, dirPath, regex)
+            : fs.readdirSync(dirPath).filter(f => regex.test(f) && fs.statSync(path.join(dirPath, f)).isFile())
+
+          if (files.length === 0) {
+            return `❌ 没有匹配 ".${ext}" 的文件`
+          }
+
+          // 过滤掉测试文件
+          const sourceFiles = files.filter(f => !f.includes("Test") && !f.includes("Tests"))
+          
+          // 设置 Bare Repo 队列状态
+          queue.mode = "directory"
+          queue.dirPath = dirPath
+          queue.files = sourceFiles
+          queue.prompt = args.prompt || "执行端到端测试生成：\n1. 加载 generate-java-ut 生成测试\n2. 加载 fix-java-ut 修复测试\n3. 加载 java-coverage 提升覆盖率\n源文件: {filename}"
+          queue.taskItems = []
+          queue.currentIndex = 0
+          queue.results = []
+          queue.running = false
+          queue.batchSize = args.batchSize || 2
+
+          let result = `✅ Bare Repo 任务队列已创建\n\n`
+          result += `📁 目录: ${dirPath}\n`
+          result += `📄 文件数: ${sourceFiles.length}\n`
+          result += `⚡ 并行组数: ${queue.batchSize}\n`
+          result += `🔄 模式: Bare Repo Worktree（真正的并行隔离）\n\n`
+          result += `文件列表（前 10 个）:\n`
+          sourceFiles.slice(0, 10).forEach((f, i) => result += `  ${i + 1}. ${f}\n`)
+          if (sourceFiles.length > 10) result += `  ... 还有 ${sourceFiles.length - 10} 个\n`
+
+          return result
+        },
+      }),
+
+      /**
+       * Bare Repo 模式：启动任务执行
+       * 
+       * 使用 BareRepoExecutor 执行：
+       * 1. 将文件分组
+       * 2. 为每个组创建独立 Worktree
+       * 3. 在 Worktree 中创建 Session 并执行任务
+       * 4. 自动清理 Worktree
+       */
+      "task-bare-start": tool({
+        description: "启动 Bare Repo 模式任务执行（真正的 Worktree 并行隔离）",
+        args: {},
+        async execute() {
+          if (queue.files.length === 0) {
+            return "❌ 队列为空，请先运行 task-bare-create"
+          }
+
+          if (queue.running) {
+            return `❌ 队列正在执行中\n当前: ${queue.currentIndex}/${queue.files.length}`
+          }
+
+          // 动态加载 BareRepoExecutor
+          let BareRepoExecutor: any
+          let createFileExecutor: any
+          
+          try {
+            const bareRepoModule = require(BARE_REPO_PATH)
+            BareRepoExecutor = bareRepoModule.BareRepoExecutor
+            createFileExecutor = bareRepoModule.createFileExecutor
+          } catch (e) {
+            return `❌ Bare Repo 模块未加载，请先运行 npm run build\n错误: ${e}`
+          }
+
+          queue.running = true
+
+          // 创建执行器
+          const executor = new BareRepoExecutor(queue.dirPath)
+          
+          // 构建执行函数
+          const promptBuilder = (file: string) => {
+            const userPrompt = queue.prompt.replace(/{filename}/g, file)
+            return `【文件路径：${path.resolve(queue.dirPath, file)}】\n\n${userPrompt}`
+          }
+          
+          const executeFileFn = createFileExecutor(client, directory, promptBuilder)
+
+          // 异步执行（不阻塞）
+          executor.execute(queue.files, queue.batchSize, executeFileFn)
+            .then((result: any) => {
+              queue.running = false
+              queue.currentIndex = queue.files.length
+              
+              // 更新结果
+              for (const fileResult of result.results) {
+                queue.results.push({
+                  filename: fileResult.filename,
+                  sessionId: fileResult.sessionId || "",
+                  status: fileResult.success ? "success" : "failed",
+                  summary: fileResult.summary,
+                  error: fileResult.error
+                })
+              }
+              
+              console.log("[BareRepo] Execution completed:", result.success ? "✅ 成功" : "❌ 失败")
+              if (result.report) {
+                console.log("[BareRepo] Report saved to:", result.report)
+              }
+            })
+            .catch((error: any) => {
+              queue.running = false
+              console.error("[BareRepo] Execution failed:", error)
+            })
+
+          await client.tui.openSessions()
+
+          let response = `✅ Bare Repo 任务已启动\n\n`
+          response += `📁 目录: ${queue.dirPath}\n`
+          response += `📄 文件数: ${queue.files.length}\n`
+          response += `⚡ 并行组数: ${queue.batchSize}\n`
+          response += `🔄 模式: Bare Repo Worktree\n\n`
+          response += `📌 每个组在独立 Worktree 中执行，拥有独立的 .m2 目录\n`
+          response += `📌 任务会自动执行并清理 Worktree\n`
+          response += `📌 运行 task-status 查看进度\n`
+          response += `⚠️ 请勿关闭当前窗口`
+
+          return response
+        },
+      }),
+
+      /**
+       * Bare Repo 模式：停止执行并清理
+       */
+      "task-bare-stop": tool({
+        description: "停止 Bare Repo 任务并清理所有 Worktree",
+        args: {},
+        async execute() {
+          queue.running = false
+
+          // 动态加载并清理
+          try {
+            const bareRepoModule = require(BARE_REPO_PATH)
+            const BareRepoExecutor = bareRepoModule.BareRepoExecutor
+            const executor = new BareRepoExecutor(queue.dirPath)
+            await executor.stop()
+          } catch (e) {
+            console.warn("[BareRepo] Cleanup warning:", e)
+          }
+
+          return `⏸️ Bare Repo 任务已停止\n\n已清理所有 Worktree\n已完成: ${queue.currentIndex}/${queue.files.length}`
         },
       }),
     },

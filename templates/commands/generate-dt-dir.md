@@ -1,11 +1,14 @@
 ---
 description: 批量端到端测试生成 - 使用任务管理插件串行或并行执行
-tools: [task-create, task-start]
+tools: [task-create, task-start, task-bare-create, task-bare-start]
 ---
 
 # 批量端到端测试生成
 
-扫描目录，使用任务管理插件执行端到端测试生成。支持串行（batchSize=1）或并行（batchSize>1）执行。
+扫描目录，使用任务管理插件执行端到端测试生成。支持三种执行模式：
+- **串行模式**（batchSize=1）：单 Session 逐个执行
+- **并发思考模式**（batchSize>1）：多 Session 并发思考，但 Maven 串行执行
+- **Bare Repo Worktree 模式**：真正的并行隔离，每个组独立 Worktree + 独立 .m2
 
 ## 参数
 
@@ -22,8 +25,12 @@ tools: [task-create, task-start]
 # 递归扫描
 /generate-dt-dir src/main/java/controller --recursive
 
-# 并行执行 4 个任务（自动启用工作空间隔离）
+# 并发思考模式（batchSize>1）
 /generate-dt-dir src/main/java/service --batch-size 4
+
+# Bare Repo Worktree 模式（真正的并行隔离）
+task-bare-create dir="src/main/java/service" batchSize=4
+task-bare-start
 ```
 
 ## ⚠️ 参数校验
@@ -186,3 +193,83 @@ task-stop
 - 避免使用过大范围（如 `src/main/java`）
 - 分批处理大型项目
 - 并行执行需要足够的磁盘空间（每个任务约 100-500MB）
+- **推荐**: 大量文件使用 Bare Repo Worktree 模式
+
+---
+
+## 三种执行模式对比
+
+| 模式 | 命令 | Maven 执行 | 工作空间 | 适用场景 |
+|------|------|-----------|---------|---------|
+| 串行 | `task-create batchSize=1` | 串行 | 共享 | 少量文件、单核 CPU |
+| 并发思考 | `task-create batchSize>1` | 串行（async-lock） | 共享 | 中量文件、思考时间长 |
+| **Bare Repo** | `task-bare-create` | **并行** | **独立 Worktree** | 大量文件、多核 CPU |
+
+---
+
+## Bare Repo Worktree 模式详解
+
+### 什么是 Bare Repo？
+
+将普通 Git 仓库转换为 Bare Repository + Worktree 结构：
+- `.bare/` - Git 仓库数据（裸仓库）
+- `main/` - 主 Worktree（工作目录）
+- 动态创建 `group-{id}/` - 独立 Worktree
+
+### 使用方式
+
+```
+# 1. 创建 Bare Repo 任务队列
+task-bare-create 
+  dir="src/main/java/service"
+  batchSize=4
+  recursive=true
+
+# 2. 启动执行
+task-bare-start
+
+# 3. 查看进度
+task-status
+
+# 4. 停止（如需）
+task-bare-stop
+```
+
+### 预期输出
+
+```
+✅ Bare Repo 任务队列已创建
+
+📁 目录: src/main/java/service
+📄 文件数: 15
+⚡ 并行组数: 4
+🔄 模式: Bare Repo Worktree（真正的并行隔离）
+
+文件列表（前 10 个）:
+  1. UserService.java
+  2. OrderService.java
+  ...
+
+📌 每个组在独立 Worktree 中执行，拥有独立的 .m2 目录
+```
+
+### Bare Repo 模式优势
+
+1. **真正的并行执行**：每个 Worktree 可以同时运行 Maven 编译
+2. **完全隔离**：独立的 .m2 目录，避免依赖冲突
+3. **高性能**：充分利用多核 CPU
+4. **自动清理**：执行完成后自动销毁 Worktree
+
+### 前置要求
+
+1. 项目必须是 Git 仓库
+2. 工作目录干净（无未提交更改）
+3. 有远程仓库配置（origin）
+4. 已运行 `npm run build` 编译 BareRepoExecutor
+
+### 注意事项
+
+- 首次使用会自动将项目转换为 Bare Repo
+- 转换后项目结构会改变（.git 变成文件，新增 .bare 目录和 main 目录）
+- 转换是一次性的，不可回退
+- Windows 需要关闭所有占用 .git 目录的程序（IDE、文件浏览器等）
