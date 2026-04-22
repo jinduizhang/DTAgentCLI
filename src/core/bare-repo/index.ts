@@ -7,3 +7,4 @@ export { WorktreePool } from './worktree-pool';
 export { GroupExecutor } from './group-executor';
 export { ResultMerger } from './result-merger';
 export { BareRepoOrchestrator } from './orchestrator';
+export { BareRepoExecutor, createFileExecutor } from './task-manager-integration';
