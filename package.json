@@ -4,6 +4,16 @@
   "description": "DTAgent CLI - Intelligent Unit Test Generation Tool",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js"
+    },
+    "./plugin": {
+      "types": "./dist/plugin/index.d.ts",
+      "require": "./dist/plugin/index.js"
+    }
+  },
   "bin": {
     "dtagent": "./bin/dtagent.js"
   },
@@ -52,6 +62,8 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "@opencode-ai/plugin": "^1.4.0",
+    "@opencode-ai/sdk": "^1.4.0",
     "async-lock": "^1.4.1",
     "chalk": "^4.1.2",
     "cli-table3": "^0.6.3",
